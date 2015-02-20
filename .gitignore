@@ -1,0 +1,17 @@
+*.log
+*.pdf
+*.gz
+*.aux
+*.bbl
+*.blg
+*.dvi
+*.out
+*.brf
+*.Rhistory
+*et al.*
+*.gitattributes
+*.mat
+*.pyc
+*.py~
+*.ipynb_checkpoints/
+*.*~
