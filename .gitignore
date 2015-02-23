@@ -15,4 +15,5 @@
 *.py~
 *.ipynb_checkpoints/
 *.*~
+*count.txt
 *concordance*

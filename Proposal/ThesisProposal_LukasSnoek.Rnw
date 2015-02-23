@@ -37,7 +37,6 @@
 \rfoot{Page \thepage}
 
 \begin{document}
-\SweaveOpts{concordance=TRUE}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Start titlepage environment
@@ -79,6 +78,21 @@ Lukas \textsc{Snoek}
 \vfill 
 
 \end{titlepage}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% KNITR stuff
+
+<<loadPackages, echo=FALSE>>=
+library(knitr)
+library(ggplot2)
+@
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Texcount 
+\newcommand\wordcount{
+    \immediate\write18{texcount -sub=section \jobname.tex  | grep "Section" | 
+    sed -e 's/+.*//' | sed -n \thesection p > 'count.txt'}
+Word count: \input{count.txt}}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Begin actual proposal form
@@ -124,7 +138,7 @@ To investigate these hypotheses, we want to use functional magnetic resonance im
 use multivariate encoding using a factorial MANOVA (see \citep{kornysheva2014}). With this analysis, we will be able to characterize and visualize perceptual and emotional networks in the brain in terms of their multivariate structure and spatial distribution. \\
 
 \noindent
-Word count = 
+\wordcount
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Project description \textmd{- max 1200 words}}
@@ -138,9 +152,6 @@ A key question in the field of cognitive neuroscience is how the brain represent
 
 In the early 21st century, the cognitive neuroscience community gradually moved from this functional localization perspective to a more network-oriented perspective \citep{sporns2002}. Instead of asking \emph{what} regions (de)activate during a particular psychological process, they started asking \emph{how} brain areas or a network of brain areas encode and represent this particular process. Put differently, researchers shifted from a univariate to a multivariate analytic approach. One of the first studies to show that the human brain encodes psychological concepts as distributed -- multivariate -- representations was the seminal paper by \cite{haxby2001}. They showed that different object categories were represented in a distributed fashion across the ventral visual cortex, regardless of mean activation level. Their approach, for which they used the term Multivariate Pattern Analysis (MVPA), gained popularity quickly as it appeared to provide a more sensitive analysis as opposed to univariate analyses \citep{norman2006,haxby2012}. Several new multivariate analyses were developed in the succeeding years, including the (successful) application of machine learning classifiers to distinguish neural representations (e.g. \citealp{cox2003}) and representational similarity analyses to characterize relations between neural patterns in a continuous fashion \citep{kriegeskorte2008}. Currently, MVPA analyses are widespread in almost all domains of cognitive, affective, and social neuroscience. For example, in vision research, MVPA has been applied to correctly decode orientation preference at the voxel-level in striate cortex (\citealp{kamitani2005}, but see \citealp{opdebeeck2010} for a more nuanced interpretation).    
 
-
-
-
 \subsection{Key questions}
 % Now state the key questions, the essence of the proposal. Here, the intended research should be connected to prior research. Testable hypotheses should be derived from the key question, and the relation between theory and research hypotheses should be clearly specified.
 
@@ -148,7 +159,8 @@ In the early 21st century, the cognitive neuroscience community gradually moved 
 % b) Translate the general research question in a clear manner into a specific research question.
 % c) Translate the specific research questions into testable research hypotheses.
 
-Word count = 
+\noindent
+\wordcount 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Procedure \textmd{– approx. 1000 words}}
@@ -162,8 +174,6 @@ Word count =
 In this study, we will apply both univariate and multivariate (RSA and MVPA) analyses. While for univariate analyses much is known about the optimal analysis parameters, this is less so for multivariate analyses due to the their novelty and fine spatial scale on which it operates. This warrants an approach in which various parameter settings -- e.g. smoothing kernel, feature selection methods, and ROI selection -- are tested for optimal use of the data. However, to avoid double-dipping the data, we implement the procedure originally proposed by \cite{kriegeskorte2009} (see figure 1) in which we partition the data set into an optimization-set and a validation-set. The data from the optimization-set will be used to explore various parameter settings, and when the optimal parameters are established, these will be cross-validated on the validation-set. This way, exploratory and confirmatory research can be combined to use the data optimally without double-dipping. 
 
 This model cross-validation approach, however, comes at the cost of effectively cutting the experiment's power in half. As univariate analyses are generally less sensitive than multivariate analyses (e.g. smaller effect sizes due to stringent multiple comparison correction), the bottleneck in terms of power would be solely be determined by the univariate analysis. Fortunately, much more is known about the optimal parameters for univariate analyses. Therefore, to avoid the power bottleneck, we will perform the univariate analysis on the entire data set.
-
-Given that our multivariate analyses employ different statistical techniques (machine learning classifiers and factorial MANOVAs) with each a different method of statistical evaluation, 
 
 \begin{figure}[t]
 \floatfoot{\textbf{Figure 1}: Schematic representation of the model optimization process for the multivariate analysis. A 50/50 partitioning ratio will be used. The univariate analysis will be done \emph{once} with predetermined parameter settings and will thus not be partitioned.}
@@ -188,7 +198,7 @@ Given that our multivariate analyses employ different statistical techniques (ma
 The research project as proposed here can be modified along recommendations from the RMP Thesis Committee and others, in each stage of the project (preparation/stimulus materials, data acquisition, or analyses). Advice on any section of this project is very much appreciated. \\
 
 \noindent
-Word count =
+\wordcount
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Intended results \textmd{- max 250 words}}
@@ -202,7 +212,8 @@ Word count =
 
 % d) Is there any practical or societal relevance? Please explain. 
 
-Word count = 
+\noindent
+\wordcount
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Work plan \textmd{– max 500 words}}
@@ -226,7 +237,7 @@ Data acquisition will take place at the Spinoza Centre for Neuroimaging. As a re
 The research project will be financed by funds of Steven Scholte. I will use approximately 30 euros of the Brain \& Cognition departemental budget to print a poster which I will present at the annual Research Master's Graduate Conference. \\
 
 \noindent
-Word count = 442
+\wordcount
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Bibliography, natbib with apalike style 
@@ -265,16 +276,19 @@ $\square$ I hereby declare that the result section of the thesis will consist of
 \item The exploratory analysis section contains additional, and thus exploratory, analyses. 
 \end{enumerate}
 
+\noindent
 \textbf{Signature student:} 
 \vspace*{2\baselineskip} \\
 \line(1,0){175} \\
 
+\noindent
 \textbf{Signature ResMas supervisor:}
 \vspace*{2\baselineskip} \\
 \line(1,0){175} \\
 
 % Uncomment if you have an external supervisor
 %
+% \noindent
 %\textbf{Signature external supervisor (if applicable):}
 %\vspace*{2\baselineskip} \\
 %\line(1,0){175} \\
