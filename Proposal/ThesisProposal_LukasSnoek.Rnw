@@ -36,9 +36,8 @@
 \lfoot{Graduate School of Psychology}
 \rfoot{Page \thepage}
 
-\usepackage{Sweave}
 \begin{document}
-\input{ThesisProposal_LukasSnoek-concordance}
+\SweaveOpts{concordance=TRUE}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Start titlepage environment
