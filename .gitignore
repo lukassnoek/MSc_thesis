@@ -1,3 +1,4 @@
+# Tex stuff
 *.log
 *.pdf
 *.gz
@@ -7,6 +8,8 @@
 *.dvi
 *.out
 *.brf
+
+# Python and other programming stuff
 *.Rhistory
 *et al.*
 *.gitattributes
@@ -19,3 +22,4 @@
 *concordance*
 *.rtf
 */figure/*
+*.sty
