@@ -33,7 +33,7 @@ def backup_Parrec(directory):
 
     for file in parFiles:
         shutil.move(file, PARREC_backup)
-    print "Back-up completed for {0} files".format(length(parFiles))
+    print "Back-up completed for {0} files".format(len(parFiles))
 
     for file in recFiles:
         shutil.move(file, PARREC_backup)
