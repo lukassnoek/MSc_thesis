@@ -14,6 +14,7 @@ import glob
 import matplotlib.pyplot as plt
 import csv
 import pickle
+import FSLutilities
 
 def extract_class_vector(subject_directory):
     """ Extracts class of each trial and returns a vector of class labels."""
@@ -41,7 +42,7 @@ def extract_class_vector(subject_directory):
         print('There is no design.con file for ' + sub_name)
     
     os.chdir(os.pardir)    
-    
+        
 def create_subject_mats(firstlevel_dir, mask, subject_stem):
     """ 
     Creates subject-specific MVPA matrices and stores them
