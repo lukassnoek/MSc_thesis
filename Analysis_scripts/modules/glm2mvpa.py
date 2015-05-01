@@ -26,21 +26,12 @@ class mvpa_mat(object):
         self.n_trials = self.data.shape[0]
         self.class_labels = class_labels        
         self.class_names = list(set(self.class_labels))
-
-    def normalize_mvpa(method):
-        ''' 
-        Normalizes mvpa matrix in a univariate (t-stat) or 
-        multivariate approach
+        
+        '''To Do:
+        - self.target (array with zeros, ones, twos)
+        - ordered version of class_names
         '''
-        
-        if method == 'univariate':
-            
-            
-        if method == 'multivariate':
-            pass
-        
-        
-
+  
 def extract_class_vector(subject_directory):
     """ Extracts class of each trial and returns a vector of class labels."""
     
@@ -66,7 +57,7 @@ def extract_class_vector(subject_directory):
     else:
         print('There is no design.con file for ' + sub_name)
     
-def create_subject_mats(mask, subject_stem):
+def create_subject_mats(mask, subject_stem, norm_method = 'nothing'):
     """ 
     Creates subject-specific MVPA matrices and stores them
     in individual dictionaries. 
@@ -104,7 +95,8 @@ def create_subject_mats(mask, subject_stem):
         print 'Processing ' + sub_name
         
         # load in dirNames
-        stat_paths = glob.glob(sub_path + '/stats_new/cope*mni*.nii.gz')
+        stat_paths = glob.glob(sub_path + '/stats_new/cope*mni.nii.gz')
+        stat_paths = sort_stat_list(stat_paths)
         n_stat = len(stat_paths)
 
         if not n_stat == len(class_labels):
@@ -121,10 +113,42 @@ def create_subject_mats(mask, subject_stem):
             data = nib.load(path).get_data()
             mvpa_data[i,:] = np.ravel(data)[mask_index]
 
+        ''' NORMALIZATION OF VOXEL PATTERNS '''
+        varcopes = glob.glob(sub_path + '/stats_new/varcope*mni.nii.gz')
+        varcopes = sort_stat_list(varcopes)
+        
+        if norm_method == 'nothing':
+            pass
+        
+        if norm_method == 'univariate':
+            for i_trial, varcope in enumerate(varcopes):
+                var = nib.load(varcope).get_data()
+                var_sq = np.sqrt(var.ravel()[mask_index])
+                mvpa_data[i_trial,] = np.divide(mvpa_data[i_trial,], var_sq)
+                
+        if norm_method == 'multivariate':
+            pass
+
         to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, class_labels) 
         
         with open(mat_dir + '/' + sub_name + '.cPickle', 'wb') as handle:
             cPickle.dump(to_save, handle)
              
     print 'Created ' + str(len(glob.glob(mat_dir + '/*.cPickle'))) + ' MVPA matrices' 
+
+def sort_stat_list(stat_list):
+    '''
+    Sorts list with paths to statistic files (e.g. COPEs, VARCOPES),
+    which are often sorted wrong (due to single and double digits).
+    This function extracts the numbers from the stat files and sorts 
+    the original list accordingly.
+    '''
     
+    num_list = []    
+    for path in stat_list:
+        num = [str(s) for s in str(os.path.basename(path)) if s.isdigit()]
+        num_list.append(int(''.join(num)))
+    
+    sorted_list = [x for y,x in sorted(zip(num_list, stat_list))]
+    return(sorted_list)
+  
