@@ -13,18 +13,43 @@ import nibabel as nib
 import glob
 import matplotlib.pyplot as plt
 import csv
-import pickle
-import FSLutilities
+import cPickle
+
+class mvpa_mat(object):
+    '''MVPA matrix of trials by features'''
+    def __init__(self, data, subject_name, mask_name, mask_index, class_labels):
+        self.data = data
+        self.subject_name = subject_name
+        self.mask_name = mask_name
+        self.mask_index = mask_index        
+        self.n_features = self.data.shape[1]
+        self.n_trials = self.data.shape[0]
+        self.class_labels = class_labels        
+        self.class_names = list(set(self.class_labels))
+
+    def normalize_mvpa(method):
+        ''' 
+        Normalizes mvpa matrix in a univariate (t-stat) or 
+        multivariate approach
+        '''
+        
+        if method == 'univariate':
+            
+            
+        if method == 'multivariate':
+            pass
+        
+        
 
 def extract_class_vector(subject_directory):
     """ Extracts class of each trial and returns a vector of class labels."""
     
-    os.chdir(subject_directory)
     sub_name = os.path.basename(os.path.normpath(subject_directory))
+    to_parse = subject_directory + '/design.con'
     
     # Read in design.con
-    if os.path.isfile('design.con'):
-        with open('design.con', 'r') as con_file:
+    if os.path.isfile(to_parse):
+        with open(to_parse, 'r') as con_file:
             con_read = csv.reader(con_file, delimiter='\t')
             class_labels = []            
             
@@ -41,9 +66,7 @@ def extract_class_vector(subject_directory):
     else:
         print('There is no design.con file for ' + sub_name)
     
-    os.chdir(os.pardir)    
-        
-def create_subject_mats(firstlevel_dir, mask, subject_stem):
+def create_subject_mats(mask, subject_stem):
     """ 
     Creates subject-specific MVPA matrices and stores them
     in individual dictionaries. 
@@ -53,21 +76,21 @@ def create_subject_mats(firstlevel_dir, mask, subject_stem):
     mask            = mask to index constrasts, either 'fstat' or a specific 
                       ROI. The exact name should be given 
                       (e.g. 'graymatter.nii.gz').
-            
+    subject_stem    = project-specific subject-prefix
+   
     Returns:
     Nothing, but creates a dir ('mvpa_mats') with individual pickle files.
     """
-
-    os.chdir(firstlevel_dir)
+    firstlevel_dir = os.getcwd()
     subject_dirs = glob.glob(os.getcwd() + '/*' + subject_stem + '*')    
     
-    os.chdir(os.pardir)
     mat_dir = os.getcwd() + '/mvpa_mats'
     
     if not os.path.exists(mat_dir):
         os.makedirs(mat_dir)
     
     # Load mask, create index
+    mask_name = os.path.basename(mask)
     mask_vol = nib.load(mask)
     mask_index = mask_vol.get_data().ravel() > 0
     n_features = np.sum(mask_index)    
@@ -78,58 +101,30 @@ def create_subject_mats(firstlevel_dir, mask, subject_stem):
         class_labels = extract_class_vector(sub_path)
         
         sub_name = os.path.basename(os.path.normpath(sub_path))
-        os.chdir(sub_path + '/reg_standard')        
-        
         print 'Processing ' + sub_name
         
         # load in dirNames
-        tstat_paths = glob.glob('*tstat*.nii.gz')
-        n_tstat = len(tstat_paths)
+        stat_paths = glob.glob(sub_path + '/stats_new/cope*mni*.nii.gz')
+        n_stat = len(stat_paths)
 
-        if not n_tstat == len(class_labels):
+        if not n_stat == len(class_labels):
             raise ValueError('The number of trials do not match the number ' \
                              'of class labels')
+        elif n_stat == 0:
+            raise ValueError('There are no valid MNI COPES in ' + os.getcwd())
+        
         # Pre-allocate
-        mvpa_mat = np.zeros([n_tstat,n_features])
+        mvpa_data = np.zeros([n_stat,n_features])
 
         # Load in data
-        for i, path in enumerate(tstat_paths):
+        for i, path in enumerate(stat_paths):
             data = nib.load(path).get_data()
-            mvpa_mat[i,:] = np.ravel(data)[mask_index]
+            mvpa_data[i,:] = np.ravel(data)[mask_index]
 
-        # Extract class_vector
-        os.chdir(mat_dir)
+        to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, class_labels) 
         
-        sub_dict = {'name': sub_name,
-                    'data': mvpa_mat,
-                    'class_labels': class_labels}
-                    
-        with open(sub_name + '.pickle', 'wb') as handle:
-            pickle.dump(sub_dict, handle)
-        
-        print 'Saving MVPA data from ' + sub_name
-        
-    print 'Created ' + str(len(glob.glob('*.pickle'))) + ' MVPA matrices' 
-    os.chdir(firstlevel_dir)
+        with open(mat_dir + '/' + sub_name + '.cPickle', 'wb') as handle:
+            cPickle.dump(to_save, handle)
+             
+    print 'Created ' + str(len(glob.glob(mat_dir + '/*.cPickle'))) + ' MVPA matrices' 
     
-    mask_toWrite = mask_index.reshape(mask_vol.shape).astype(float)
-    mask_outVol = nib.Nifti1Image(mask_toWrite, np.eye(4))    
-    nib.save(mask_outVol, 'mask_outVol')
-    
-    slice_0 = mask_toWrite[26, :, :]
-    slice_1 = mask_toWrite[:, 30, :]
-    slice_2 = mask_toWrite[:, :, 16]
-    show_slices([slice_0, slice_1, slice_2])
-    plt.suptitle("Center slices for mask volume")  
-   
-def show_slices(slices):
-    """ Function to display row of image slices """
-    fig, axes = plt.subplots(1, len(slices))
-    
-    for i, slice in enumerate(slices):
-        axes[i].imshow(slice.T, cmap="Reds", origin="lower")
-        axes[i].set_xlim([0, 110])
-        axes[i].set_ylim([-10, 100])
-        axes[i].set_xticks([]) 
-        axes[i].set_yticks([]) 
-        axes[i].axis('off')
