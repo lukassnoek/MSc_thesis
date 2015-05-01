@@ -57,7 +57,7 @@ def extract_class_vector(subject_directory):
     else:
         print('There is no design.con file for ' + sub_name)
     
-def create_subject_mats(mask, subject_stem, norm_method = 'nothing'):
+def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothing'):
     """ 
     Creates subject-specific MVPA matrices and stores them
     in individual dictionaries. 
@@ -83,7 +83,7 @@ def create_subject_mats(mask, subject_stem, norm_method = 'nothing'):
     # Load mask, create index
     mask_name = os.path.basename(mask)
     mask_vol = nib.load(mask)
-    mask_index = mask_vol.get_data().ravel() > 0
+    mask_index = mask_vol.get_data().ravel() > mask_threshold
     n_features = np.sum(mask_index)    
     
     for i_sub, sub_path in enumerate(subject_dirs):
@@ -114,21 +114,27 @@ def create_subject_mats(mask, subject_stem, norm_method = 'nothing'):
             mvpa_data[i,:] = np.ravel(data)[mask_index]
 
         ''' NORMALIZATION OF VOXEL PATTERNS '''
-        varcopes = glob.glob(sub_path + '/stats_new/varcope*mni.nii.gz')
-        varcopes = sort_stat_list(varcopes)
         
         if norm_method == 'nothing':
             pass
         
         if norm_method == 'univariate':
+            varcopes = glob.glob(sub_path + '/stats_new/varcope*mni.nii.gz')
+            varcopes = sort_stat_list(varcopes)
+            
             for i_trial, varcope in enumerate(varcopes):
                 var = nib.load(varcope).get_data()
                 var_sq = np.sqrt(var.ravel()[mask_index])
                 mvpa_data[i_trial,] = np.divide(mvpa_data[i_trial,], var_sq)
                 
         if norm_method == 'multivariate':
-            pass
-
+            res4d = nib.load(sub_path + '/stats_new/res4d_mni.nii.gz').get_data()
+            res4d.resize([np.prod(res4d.shape[0:3]), res4d.shape[3]])
+            res4d = res4d[mask_index,]            
+        
+            res_cov = np.cov(res4d)
+            
+        
         to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, class_labels) 
         
         with open(mat_dir + '/' + sub_name + '.cPickle', 'wb') as handle:
@@ -143,7 +149,6 @@ def sort_stat_list(stat_list):
     This function extracts the numbers from the stat files and sorts 
     the original list accordingly.
     '''
-    
     num_list = []    
     for path in stat_list:
         num = [str(s) for s in str(os.path.basename(path)) if s.isdigit()]
