@@ -18,20 +18,33 @@ import cPickle
 class mvpa_mat(object):
     '''MVPA matrix of trials by features'''
     def __init__(self, data, subject_name, mask_name, mask_index, class_labels):
+        # Initialized attributes        
         self.data = data
         self.subject_name = subject_name
         self.mask_name = mask_name
         self.mask_index = mask_index        
+        self.class_labels = class_labels        
+        
+        # Computed attributes (based on initialized attributes)
         self.n_features = self.data.shape[1]
         self.n_trials = self.data.shape[0]
-        self.class_labels = class_labels        
-        self.class_names = list(set(self.class_labels))
         
-        '''To Do:
-        - self.target (array with zeros, ones, twos)
-        - ordered version of class_names
-        '''
-  
+        # Unique class names (sorted)
+        class_names = []
+        [class_names.append(i) for i in class_labels if not class_names.count(i)]
+        self.class_names = class_names
+                
+        self.n_class = len(class_names)        
+        self.n_inst = self.n_trials / self.n_class
+        
+        # Create numeric label vector
+        n_class = len(class_names)
+        num_labels = []        
+        for i in xrange(n_class):
+            for j in xrange(1, self.n_inst+1):
+                num_labels.append(1*i)
+        self.num_labels = np.asarray(num_labels)            
+        
 def extract_class_vector(subject_directory):
     """ Extracts class of each trial and returns a vector of class labels."""
     
@@ -114,7 +127,6 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
             mvpa_data[i,:] = np.ravel(data)[mask_index]
 
         ''' NORMALIZATION OF VOXEL PATTERNS '''
-        
         if norm_method == 'nothing':
             pass
         
@@ -132,9 +144,9 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
             res4d.resize([np.prod(res4d.shape[0:3]), res4d.shape[3]])
             res4d = res4d[mask_index,]            
         
-            res_cov = np.cov(res4d)
+            #res_cov = np.cov(res4d)
             
-        
+        # Initializing mvpa_mat object, which will be saved as a pickle file
         to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, class_labels) 
         
         with open(mat_dir + '/' + sub_name + '.cPickle', 'wb') as handle:
