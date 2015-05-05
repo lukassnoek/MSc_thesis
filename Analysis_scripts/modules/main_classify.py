@@ -9,16 +9,16 @@ import numpy as np
 import itertools
 
 def draw_random_subsample(mvpa_data, n_train):
-    ''' Draws random subsample of trials for each class '''
-    train_ind = np.zeros(len(mvpa_data.num_labels), dtype=np.int)
+    ''' Draws random subsample of test trials for each class '''
+    test_ind = np.zeros(len(mvpa_data.num_labels), dtype=np.int)
     
     j = 0
     for c in mvpa_data.class_names:
         ind = np.random.choice(np.arange(j+1, j+mvpa_data.n_inst+1), n_train, replace=False)            
-        train_ind[ind] = 1
+        test_ind[ind-1] = 1
         j = j + mvpa_data.n_inst
     
-    return train_ind.astype(bool)
+    return test_ind.astype(bool)
     
 def select_voxels(mvpa, train_ind, threshold):
     ''' 
@@ -27,13 +27,13 @@ def select_voxels(mvpa, train_ind, threshold):
     
     # Setting useful parameters & pre-allocation
     n_train = np.sum(train_ind) / mvpa.n_class
-    mvpa.data = mvpa.data[train_ind,] # should be moved to main_classify() later
+    data = mvpa.data[train_ind,] # should be moved to main_classify() later
     av_patterns = np.zeros((mvpa.n_class, mvpa.n_features))
     
     # Calculate mean patterns
     j = 0    
     for c in xrange(mvpa.n_class):         
-        av_patterns[c,] = np.mean(mvpa.data[range(j,j + n_train),], axis = 0)
+        av_patterns[c,] = np.mean(data[range(j,j + n_train),], axis = 0)
         j = j + n_train
     
     # Create difference vectors, z-score standardization, absolute
@@ -47,5 +47,22 @@ def select_voxels(mvpa, train_ind, threshold):
     
     diff_vec = np.mean(diff_patterns, axis = 0)
     return(diff_vec > threshold)
+   
+def mvpa_classify(mvpa, iterations):
+    scores = []
+
+    for i in xrange(iterations):
+        test_idx = draw_random_subsample(mvpa, 4)
+        train_idx = np.invert(test_idx)
+        feat_idx = select_voxels(mvpa,train_idx,1.5)
         
+        train_data = mvpa.data[train_idx,:][:,feat_idx]
+        test_data = mvpa.data[test_idx,:][:,feat_idx]
+        
+        clf = svm.SVC()
+        clf.fit(train_data, mvpa.num_labels[train_idx])
+        x = clf.predict(test_data)
+        scores.append(np.mean(x == mvpa.num_labels[test_idx]))
+    
+    return(np.mean(scores))
         

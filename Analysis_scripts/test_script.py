@@ -9,7 +9,6 @@ import os
 import cPickle
 import sys
 import main_classify as main
-import numpy as np
 sys.path.append('/home/lukas/Dropbox/ResMas_UvA/Thesis/Git/Analysis_scripts/modules/')
 
 import glm2mvpa as g2m
@@ -24,7 +23,4 @@ g2m.create_subject_mats(mask, subject_stem, mask_threshold,norm_method)
 
 os.chdir('/media/lukas/Data/Matlab2Python/FirstLevel/mvpa_mats')
 test = cPickle.load(open('hww001_zinnen1.cPickle'))
-train_ind = main.draw_random_subsample(test, 4)
-test_ind = np.invert(train_ind)
-
-
+main.mvpa_classify(test, 100)
