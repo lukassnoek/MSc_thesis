@@ -1,8 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-Module to create subject-specific MVPA matrices of voxels X trials.
-Loops over subjects and load single trial GLM data and stores them 
-in a dictionary with 'data' (ndarray) and 'trials_class' (list).
+Module to create subject-specific MVPA matrices of trials X voxels.
+Contains:
+1. mvpa_mat class;
+2. create_subject_mats (main mvpa_mat creation);
+3. Some uninteresting but necessary file parsing/transforming functions
+
+The creat_subject_mats function does the following for each subject:
+1. Loads in mni-transformed first-level COPEs
+2. Indexes vectorized copes with specified mask (e.g. ROI/gray matter)
+3. Normalizes COPEs by their variance (sqrt(VARCOPE)); this will be extended 
+with a multivariate normalization technique in the future
+4. Initializes the result as an mvpa_mat
+5. Saves subject-specific mvpa_mat as .cpickle file 
 
 Lukas Snoek, master thesis Dynamic Affect, 2015
 """
@@ -11,9 +21,9 @@ import os
 import numpy as np
 import nibabel as nib
 import glob
-import matplotlib.pyplot as plt
 import csv
 import cPickle
+from sklearn import preprocessing as preproc
 
 class mvpa_mat(object):
     '''MVPA matrix of trials by features'''
@@ -29,20 +39,20 @@ class mvpa_mat(object):
         self.n_features = self.data.shape[1]
         self.n_trials = self.data.shape[0]
         
-        # Unique class names (sorted)
         class_names = []
         [class_names.append(i) for i in class_labels if not class_names.count(i)]
         self.class_names = class_names
-                
         self.n_class = len(class_names)        
         self.n_inst = self.n_trials / self.n_class
         
         # Create numeric label vector
         n_class = len(class_names)
         num_labels = []        
+        
         for i in xrange(n_class):
             for j in xrange(1, self.n_inst+1):
                 num_labels.append(1*i)
+
         self.num_labels = np.asarray(num_labels)            
         
 def extract_class_vector(subject_directory):
@@ -72,8 +82,8 @@ def extract_class_vector(subject_directory):
     
 def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothing'):
     """ 
-    Creates subject-specific MVPA matrices and stores them
-    in individual dictionaries. 
+    Creates subject-specific MVPA matrices, initializes them as an
+    mvpa_mat object and saves them as a cpickle file.
     
     Args: 
     firstlevel_dir  = directory with individual firstlevel data
@@ -81,13 +91,15 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
                       ROI. The exact name should be given 
                       (e.g. 'graymatter.nii.gz').
     subject_stem    = project-specific subject-prefix
+    mask_threshold  = min. threshold of probabilistic FSL mask
    
     Returns:
     Nothing, but creates a dir ('mvpa_mats') with individual pickle files.
-    """
-    firstlevel_dir = os.getcwd()
-    subject_dirs = glob.glob(os.getcwd() + '/*' + subject_stem + '*')    
     
+    Lukas Snoek    
+    """
+    
+    subject_dirs = glob.glob(os.getcwd() + '/*' + subject_stem + '*')        
     mat_dir = os.getcwd() + '/mvpa_mats'
     
     if not os.path.exists(mat_dir):
@@ -95,21 +107,21 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
     
     # Load mask, create index
     mask_name = os.path.basename(mask)
-    mask_vol = nib.load(mask)
-    mask_index = mask_vol.get_data().ravel() > mask_threshold
+    mask_index = nib.load(mask)
+    mask_index = mask_index.get_data().ravel() > mask_threshold
     n_features = np.sum(mask_index)    
     
-    for i_sub, sub_path in enumerate(subject_dirs):
+    for sub_path in subject_dirs:
         
-        # Extract class vector
+        # Extract class vector (see definition below)
         class_labels = extract_class_vector(sub_path)
         
         sub_name = os.path.basename(os.path.normpath(sub_path))
-        print 'Processing ' + sub_name
+        print 'Processing ' + sub_name + ' ... ',
         
-        # load in dirNames
+        # Generate and sort paths to stat files (COPEs)
         stat_paths = glob.glob(sub_path + '/stats_new/cope*mni.nii.gz')
-        stat_paths = sort_stat_list(stat_paths)
+        stat_paths = sort_stat_list(stat_paths) # see function below
         n_stat = len(stat_paths)
 
         if not n_stat == len(class_labels):
@@ -121,10 +133,10 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
         # Pre-allocate
         mvpa_data = np.zeros([n_stat,n_features])
 
-        # Load in data
+        # Load in data (COPEs)
         for i, path in enumerate(stat_paths):
-            data = nib.load(path).get_data()
-            mvpa_data[i,:] = np.ravel(data)[mask_index]
+            cope = nib.load(path).get_data()
+            mvpa_data[i,:] = np.ravel(cope)[mask_index]
 
         ''' NORMALIZATION OF VOXEL PATTERNS '''
         if norm_method == 'nothing':
@@ -145,13 +157,16 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
             res4d = res4d[mask_index,]            
         
             #res_cov = np.cov(res4d)
-            
+        
+        mvpa_data = preproc.scale(mvpa_data)
+        
         # Initializing mvpa_mat object, which will be saved as a pickle file
         to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, class_labels) 
         
         with open(mat_dir + '/' + sub_name + '.cPickle', 'wb') as handle:
             cPickle.dump(to_save, handle)
-             
+    
+        print 'done.'
     print 'Created ' + str(len(glob.glob(mat_dir + '/*.cPickle'))) + ' MVPA matrices' 
 
 def sort_stat_list(stat_list):
