@@ -44,12 +44,14 @@ class mvpa_mat(object):
         self.class_names = class_names
         self.n_class = len(class_names)        
         self.n_inst = self.n_trials / self.n_class
-        
+        self.class_idx = [np.arange(self.n_inst*i,self.n_inst*i+self.n_inst) \
+                          for i in range(self.n_class)]
+
         # Create numeric label vector
         n_class = len(class_names)
         num_labels = []        
         
-        for i in xrange(n_class):
+        for i in xrange(1, n_class+1):
             for j in xrange(1, self.n_inst+1):
                 num_labels.append(1*i)
 
