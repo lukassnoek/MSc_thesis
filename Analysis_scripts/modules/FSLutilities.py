@@ -11,7 +11,7 @@ import os
 def call_flirt(file_type):
     '''Docstring: to insert'''
 
-    feat_dirs = [os.path.abspath(fpath) for fpath in glob.glob('*')]
+    feat_dirs = [os.path.abspath(fpath) for fpath in glob.glob(os.getcwd() + '/*/*.feat')]
     
     for fDir in feat_dirs:
         reg_dir = fDir + '/reg'
@@ -19,16 +19,14 @@ def call_flirt(file_type):
     
         if not os.path.exists(reg_dir):
             print 'There is no registration info; skipping!'
-            continue
         elif not os.path.exists(stats_dir):
             print 'The stats directory seems to be missing; skipping!'
-            continue
 
         stats_mni_dir = os.path.abspath(fDir) + '/stats_new'
         if not os.path.exists(stats_mni_dir):
             os.mkdir(stats_mni_dir)
             print "Created " + stats_mni_dir
-            
+                
         mni_file = reg_dir + '/standard.nii.gz'
         premat_file = reg_dir + '/example_func2highres.mat'
         

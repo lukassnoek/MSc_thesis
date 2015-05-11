@@ -27,12 +27,13 @@ from sklearn import preprocessing as preproc
 
 class mvpa_mat(object):
     '''MVPA matrix of trials by features'''
-    def __init__(self, data, subject_name, mask_name, mask_index, class_labels):
+    def __init__(self, data, subject_name, mask_name, mask_index, mask_shape, class_labels):
         # Initialized attributes        
         self.data = data
         self.subject_name = subject_name
         self.mask_name = mask_name
         self.mask_index = mask_index        
+        self.mask_shape = mask_shape
         self.class_labels = class_labels        
         
         # Computed attributes (based on initialized attributes)
@@ -101,7 +102,7 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
     Lukas Snoek    
     """
     
-    subject_dirs = glob.glob(os.getcwd() + '/*' + subject_stem + '*')        
+    subject_dirs = glob.glob(os.getcwd() + '/*/*' + subject_stem + '*.feat')
     mat_dir = os.getcwd() + '/mvpa_mats'
     
     if not os.path.exists(mat_dir):
@@ -109,8 +110,9 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
     
     # Load mask, create index
     mask_name = os.path.basename(mask)
-    mask_index = nib.load(mask)
-    mask_index = mask_index.get_data().ravel() > mask_threshold
+    mask_vol = nib.load(mask)
+    mask_shape = mask_vol.get_shape()
+    mask_index = mask_vol.get_data().ravel() > mask_threshold
     n_features = np.sum(mask_index)    
     
     for sub_path in subject_dirs:
@@ -118,7 +120,8 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
         # Extract class vector (see definition below)
         class_labels = extract_class_vector(sub_path)
         
-        sub_name = os.path.basename(os.path.normpath(sub_path))
+        sub_name = os.path.basename(sub_path).split(".")[0]
+        
         print 'Processing ' + sub_name + ' ... ',
         
         # Generate and sort paths to stat files (COPEs)
@@ -163,7 +166,7 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
         mvpa_data = preproc.scale(mvpa_data)
         
         # Initializing mvpa_mat object, which will be saved as a pickle file
-        to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, class_labels) 
+        to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, mask_shape, class_labels) 
         
         with open(mat_dir + '/' + sub_name + '.cPickle', 'wb') as handle:
             cPickle.dump(to_save, handle)
