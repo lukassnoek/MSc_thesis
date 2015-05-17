@@ -17,6 +17,8 @@ with a multivariate normalization technique in the future
 Lukas Snoek, master thesis Dynamic Affect, 2015
 """
 
+_author_ = "Lukas"
+
 import os
 import numpy as np
 import nibabel as nib
@@ -25,7 +27,7 @@ import csv
 import cPickle
 from sklearn import preprocessing as preproc
 
-class mvpa_mat(object):
+class mvpa_mat():
     '''MVPA matrix of trials by features'''
     def __init__(self, data, subject_name, mask_name, mask_index, mask_shape, class_labels):
         # Initialized attributes        
@@ -56,7 +58,11 @@ class mvpa_mat(object):
             for j in xrange(1, self.n_inst+1):
                 num_labels.append(1*i)
 
-        self.num_labels = np.asarray(num_labels)            
+        self.num_labels = np.asarray(num_labels)
+
+    def normalize(self, style):
+        if style == 'z':
+            self.data = normalize(self.data)
         
 def extract_class_vector(subject_directory):
     """ Extracts class of each trial and returns a vector of class labels."""
@@ -154,7 +160,7 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
             for i_trial, varcope in enumerate(varcopes):
                 var = nib.load(varcope).get_data()
                 var_sq = np.sqrt(var.ravel()[mask_index])
-                mvpa_data[i_trial,] = np.divide(mvpa_data[i_trial,], var_sq)
+                mvpa_data[i_trial,] = mvpa_data[i_trial,] / var_sq
                 
         if norm_method == 'multivariate':
             res4d = nib.load(sub_path + '/stats_new/res4d_mni.nii.gz').get_data()
@@ -172,15 +178,15 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
             cPickle.dump(to_save, handle)
     
         print 'done.'
-    print 'Created ' + str(len(glob.glob(mat_dir + '/*.cPickle'))) + ' MVPA matrices' 
+    print 'Created %i MVPA matrices' %  len(glob.glob(mat_dir + '/*.cPickle'))
 
 def sort_stat_list(stat_list):
-    '''
+    """
     Sorts list with paths to statistic files (e.g. COPEs, VARCOPES),
     which are often sorted wrong (due to single and double digits).
     This function extracts the numbers from the stat files and sorts 
     the original list accordingly.
-    '''
+    """
     num_list = []    
     for path in stat_list:
         num = [str(s) for s in str(os.path.basename(path)) if s.isdigit()]
@@ -188,4 +194,45 @@ def sort_stat_list(stat_list):
     
     sorted_list = [x for y,x in sorted(zip(num_list, stat_list))]
     return(sorted_list)
-  
+    
+def merge_runs():
+    
+    sub_paths = [os.path.abspath(path) for path in glob.glob(os.getcwd() + '/mvpa_mats/*WIPPM*cPickle*')]
+    abbr = [os.path.basename(path)[6] for path in sub_paths]    
+    sub_paths = [x for y,x in sorted(zip(abbr, sub_paths))]
+    
+    n_sub = len(sub_paths)
+    
+    i = 0
+    for dummy in xrange(n_sub/2):
+        run1 = cPickle.load(open(sub_paths[i]))
+        run2 = cPickle.load(open(sub_paths[i+1]))
+        
+        data = np.zeros((run1.n_trials*2, run1.n_features))
+        class_labels = []
+        
+        j = 0
+        for k in xrange(run1.n_trials-1):
+            data[j,:] = run1.data[k,:]
+            data[j+1,:] = run2.data[k,:]
+                        
+            class_labels.append(run1.class_labels[k])
+            class_labels.append(run2.class_labels[k])
+            
+            j += 2
+        
+        class_labels.append(run1.class_labels[k+1])
+        class_labels.append(run2.class_labels[k+1])
+        
+        name = os.path.basename(sub_paths[i])[0:7] + '_merged'
+        mask_name = run1.mask_name
+        mask_index = run1.mask_index
+        mask_shape = run1.mask_shape
+        
+        to_save = mvpa_mat(data,name,mask_name, mask_index, mask_shape, class_labels)
+        
+        with open(os.getcwd() + '/' + name + '.cPickle', 'wb') as handle:
+            cPickle.dump(to_save, handle)
+            
+        i += 2
+        print "Merged subject %i " % dummy
