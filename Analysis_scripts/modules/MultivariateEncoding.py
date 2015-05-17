@@ -14,12 +14,40 @@ Dependencies (all open source):
 - nibabel
 - nipy (for 2D plotting)
 
-
-
 Lukas Snoek, spring 2015
 """
 
 _author_ = "Lukas Snoek"
+#################### MAIN ANALYSIS SCRIPT ####################################
+# setting some arguments
+os.chdir('/media/lukas/Data/Matlab2Python/FirstLevel/')
+subject_stem = 'HWW'
+mask_dir = '/media/lukas/Data/Matlab2Python/FSL_masks/ROIs/Lateralized_masks'
+mask_dir2 = '/media/lukas/Data/Matlab2Python/FSL_masks/ROIs/Bilateral_masks'
+
+MNI_path = '/media/lukas/Data/Matlab2Python/FSL_masks/MNI152_T1_2mm_brain.nii.gz'
+mask_threshold = 30
+prop_train = 1
+z_thres = 0
+t_thres = 2
+
+t_map, scores = main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train, z_thres, t_thres)
+thres_map = np.ma.masked_less(t_map, 3)
+plot_map(thres_map, affine)
+
+lst = [tval[1] for i,tval in enumerate(scores)]
+tv = np.hstack(tuple(lst))
+n = 1770
+pval = [scipy.stats.t.sf(np.abs(t), n-1)*2 for t in tv]
+corrected = sm.multipletests(pval, method = 'fdr_bh')
+corr = corrected[0]
+
+[mask[0] for i,mask in enumerate(scores) if corr[i]]
+
+img = nib.Nifti1Image(t_map, np.eye(4))
+nib.save(img, 'test')
+
+t_map2, scores2 = main(subject_stem, mask_dir2, mask_threshold, MNI_path, prop_train, z_thres, t_thres)
 
 #################### Importing neccesary packages ############################
 
@@ -34,32 +62,93 @@ from sklearn import preprocessing as preproc
 from nipy.labs.viz import plot_map
 import matplotlib.pyplot as plt
 from sklearn.metrics.pairwise import euclidean_distances as euc_dist
+import itertools
+import statsmodels.sandbox.stats.multicomp as sm
 
 ##############################################################################
-'''
-Create some random data set with two factors:
-factor_let (A, B) and factor_num (1, 2) with each 15 instances.
-Initilialize this as a mvpa_mat object (see glm2mvpa module).
-'''
 
-#data = np.random.normal(10, 5, (60, 100))
-#subject_name = 'test'
-#mask_name = 'random_gauss'
-#mask_index = None
-#mask_shape = None
-#factor_let = ['a'] * 30 + ['b'] * 30
-#factor_num = [1] * 15 + [2] * 15 + [1] * 15 + [2] * 15
-#class_labels = zip(factor_let, factor_num)
+def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train, z_thres, t_thres):
+    """ This function performs the main encoding analysis by looping over
+    different masks (region of interests, ROIs). For each mask, it creates
+    an mvpa_mat (with .data of trials x features from mask) for each subject.
+    It subsequently averages de RDMs over subjects and performs the regression
+    analyses and stores the t-value corresponding to the mask.
+    
+    Args:
+        subject_stem:       study-specific subject-prefix (here: 'HWW')
+        mask_dir:           directory in which FSL masks are stored
+        mask_threshold:     minimum for probabilistic FSL masks
+        MNI_path:           path to MNI152 nifti file
+        prop_train:         proportion of training trials, if cross-validated
+                            feature selection is performed (if not: prop_train
+                            = 1)
+        z_thres:            If prop_train < 1, z_thres refers to the z-value
+                            cutoff scores for the difference index during
+                            univariate feature selection.
+    
+    Returns:
+        t_map:              ndarray of size MNI.shape (91, 109, 91) with 
+                            t-values for each evaluated mask inserted.
+        scores:             list of tuples with mask name [0] and corresponding
+                            t-value [1]       
+    """
+    
+    # Get absolute paths of masks (with .nii.gz extension)
+    mask_paths = glob.glob(mask_dir + '/*nii.gz')
+    
+    # Load MNI nifti file, extract affine
+    MNI = nib.load(MNI_path) 
+    affine = MNI.get_affine()
+    
+    # Initialize empty t-value map and corresponding list
+    t_map = np.zeros((MNI.get_shape()))
+    t_vals = []
+    
+    # Loop over masks
+    for j,mask in enumerate(mask_paths):
+        
+        # Create subject matrices with specific maks
+        create_subject_mats(mask,subject_stem,mask_threshold,norm_method = 'univariate')
+        merge_runs()
+        
+        rel_paths = glob.glob('mvpa_mats/*' + subject_stem + '*merged.cPickle')
+        sub_paths = [os.path.abspath(path) for path in rel_paths]
+        
+        # This is somewhat ugly, but there is no way to know how many trials
+        # there are without loading a subject file first 
+        n_trials = 120 * prop_train
+        
+        # Initialization of RDM (subjects x RDM row x RDM col)
+        RDM = np.zeros((len(sub_paths), n_trials, n_trials))    
+    
+        # Loop over subjects to load in data
+        for i,sub in enumerate(sub_paths):
+            mvpa_data = cPickle.load(open(sub))
+            RDM[i,:,:],test_idx = create_RDM(mvpa_data, prop_train, z_thres)
+            #Reg = create_regressors(mvpa_data)
+            #t_vals.append(test_RDM(RDM, Reg))
+    
+        # Average RDMs, create regressor, run regression, fill t_map
+        avRDM = np.mean(RDM, axis = 0)
+        Reg = create_regressors(mvpa_data,test_idx)
+        t_val = test_RDM(avRDM, Reg)
+        mni_idx = mvpa_data.mask_index.reshape(MNI.get_shape())
+        t_map[mni_idx] = t_val
+        
+        print "Done processing mask: %s" % os.path.basename(mask),
+        print ' (' + str(j+1) + '/' + str(len(mask_paths)) + ') ',
+        print 't-value = ' + str(t_val) 
+        
+        t_vals.append(t_val)
 
-#test_fac = mvpa_mat(data, subject_name, mask_name, mask_index, mask_shape, class_labels)
-#obs_fac = create_RDM(test_fac)
-#pred_fac = create_regressors(test_fac)
-
-#os.chdir('/media/lukas/Data/Matlab2Python/FirstLevel/mvpa_mats/')
-#test_simple = cPickle.load(open('HWW_001-20140205-0005-WIPPM_Zinnen1.cPickle'))
-#obs_simple = create_RDM(test_simple)
-#pred_simple = create_regressors(test_simple)
-#tval = test_RDM(obs_simple, pred_simple)
+    # Plot the t_map, thresholded by t_thres
+    thres_map = np.ma.masked_less(t_map, t_thres)
+    plot_map(thres_map, affine)
+    
+    scores = zip([os.path.basename(mask) for mask in mask_paths], t_vals)
+    return(t_map, scores)
+    
+##############################################################################
 
 #################### PREPROCESSING SCRIPTS ###################################
 """ These functions (and class) take care of the 'preprocessing' of single
@@ -203,8 +292,6 @@ def create_subject_mats(mask,subject_stem,mask_threshold,norm_method = 'univaria
         
         sub_name = os.path.basename(sub_path).split(".")[0]
         
-        print 'Processing ' + sub_name + ' ... ',
-        
         # Generate and sort paths to stat files (FSL COPE files)
         stat_paths = glob.glob(sub_path + '/stats_new/cope*mni.nii.gz')
         stat_paths = sort_stat_list(stat_paths) # see function below
@@ -255,9 +342,6 @@ def create_subject_mats(mask,subject_stem,mask_threshold,norm_method = 'univaria
         with open(mat_dir + '/' + sub_name + '.cPickle', 'wb') as handle:
             cPickle.dump(to_save, handle)
     
-        print 'done.'
-    print 'Created %i MVPA matrices' %  len(subject_dirs)
-
 def sort_stat_list(stat_list):
     """
     Sorts list with paths to statistic files (e.g. COPEs, VARCOPES),
@@ -321,7 +405,6 @@ def merge_runs():
             cPickle.dump(to_save, handle)
             
         i += 2
-        print "Merged subject %i " % dummy
     
 ##############################################################################
 
@@ -332,48 +415,61 @@ with cPickle files containing mvpa_mat objects that can be processed. The main
 analysis analysis function, main(), needs to be executed in the FirstLevel
 directory. It loops over a specified amount of FSL (MNI) masks and subjects.
 """
+       
+def select_features(mvpa_data, prop_train, z_thres):
+    n_train = np.round(mvpa_data.n_inst * prop_train)
+    test_idx = np.zeros(mvpa_data.n_trials)
+    
+    for c in xrange(mvpa_data.n_class):
+        ind = np.random.choice(mvpa_data.class_idx[c], n_train, replace=False)            
+        test_idx[ind-1] = 1
+        
+    test_idx = test_idx.astype(bool)
+    train_idx = np.invert(test_idx)   
 
-def main(pickle_stem, method):
+    n_test = np.sum(train_idx) / mvpa_data.n_class
+    trial_idx = [range(n_test*x,n_test*(x+1)) for x in range(mvpa_data.n_class)]
+    data = mvpa_data.data[train_idx,] # should be moved to main_classify() later
+    av_patterns = np.zeros((mvpa_data.n_class, mvpa_data.n_features))
     
-    # Initialize MNI ndarray to save t-values
-    MNI_path = '/media/lukas/Data/Matlab2Python/FSL_masks/MNI152_T1_2mm_brain.nii.gz'    
-    affine = MNI.get_affine()
+    # Calculate mean patterns
+    for c in xrange(mvpa_data.n_class):         
+        av_patterns[c,] = np.mean(data[trial_idx[c],], axis = 0)
+       
+    # Create difference vectors, z-score standardization, absolute
+    comb = list(itertools.combinations(range(1,mvpa_data.n_class+1),2))
+    diff_patterns = np.zeros((len(comb), mvpa_data.n_features))
+        
+    for i, cb in enumerate(comb):        
+        x = np.subtract(av_patterns[cb[0]-1,], av_patterns[cb[1]-1,])
+        diff_patterns[i,] = np.abs((x - x.mean()) / x.std()) 
     
-    test = np.zeros((91,109,91))
-    test[mask_index.reshape((91,109,91))] = 1
-    thresholded_map = np.ma.masked_less(test, 0.5)
+    diff_vec = np.mean(diff_patterns, axis = 0)
+    feat_idx = diff_vec > z_thres
+
+    return(feat_idx,test_idx)
     
-    plot_map(thresholded_map, MNI.get_affine())    
-    
-    sub_paths = [os.path.abspath(path) for path in glob.glob('*' + pickle_stem + '*.cPickle')]
-    mean_RDM = np.zeros((len(sub_paths), 120, 120))    
-    
-    for i,sub in enumerate(sub_paths):
-        mvpa_data = cPickle.load(open(sub))
-        mean_RDM[i,:,:] = create_RDM(mvpa_data)
-        #Reg = create_regressors(mvpa_data)
-        #t_vals.append(test_RDM(RDM, Reg))
-        print "Processed subject %i" % i + 1
-    
-    avRDM = np.mean(mean_RDM, axis = 0)
-    Reg = create_regressors(mvpa_data)
-    test_RDM(avRDM, Reg)
-    
-def create_RDM(mvpa_data, method = 'euclidian'):
+def create_RDM(mvpa_data, prop_train, z_thres, method = 'euclidian'):
     """ Creates a symmetric distance matrix for an mvpa_mat object. Right now,
     uses the euclidian distance by default, but will (should?) be extended
     to incorporate different distance metrics.
     """
     
+    if prop_train < 1:
+        feat_idx, test_idx = select_features(mvpa_data, prop_train, z_thres)
+    else:
+        feat_idx = np.ones(mvpa_data.n_features).astype(bool)
+        test_idx = np.ones(mvpa_data.n_trials).astype(bool)
+    
     if method == 'euclidian':
-        dist_mat = euc_dist(mvpa_data.data)
+        dist_mat = euc_dist(mvpa_data.data[test_idx,:][:,feat_idx])
     elif method == 'mahalanobis':
         pass
         # Not yet incorporated, some trouble with NANs 
         
-    return(dist_mat)
+    return(dist_mat,test_idx)
         
-def create_regressors(mvpa_data):
+def create_regressors(mvpa_data, test_idx):
     """ 
     Creates RDM regressors/predictors given the factors in class_labels 
     attribute of mvpa_mat object. Is 'blind' to the amount of factors,
@@ -402,14 +498,18 @@ def create_regressors(mvpa_data):
         n_fact = 1
         design = 'simple'
     
+    # Update parameters after feature selection
+    n_trial = np.sum(test_idx)
+    class_labels = list(np.array(mvpa_data.class_labels)[test_idx])
+    
     # Pre-allocation of pred_RDM for speed
-    pred_RDM = np.ones((n_fact,mvpa_data.n_trials,mvpa_data.n_trials))
+    pred_RDM = np.ones((n_fact,n_trial,n_trial))
     
     # Create main effect RDMs for factorial design
     if design == 'multiple':
         # Loop over factors
         for fact in xrange(n_fact-1):    
-            entries = zip(*mvpa_data.class_labels)[fact]
+            entries = zip(*class_labels)[fact]
             
             # Loop over trials within factor
             for idx,trial in enumerate(entries):
@@ -422,14 +522,14 @@ def create_regressors(mvpa_data):
     # Create main effect for simple design; had to be in different block
     # because of indexing (could be more clean; future implementation!)
     else:
-        entries = mvpa_data.class_labels
+        entries = class_labels
         for idx,trial in enumerate(entries):
             same = [trial == x for x in entries]
             pred_RDM[0,idx,:] = np.invert(same)                  
             
     # Create interaction RDM if design is multiple
     if design == 'multiple':
-        zipped = [str(x) + '_' + str(y) for x,y in mvpa_data.class_labels]
+        zipped = [str(x) + '_' + str(y) for x,y in class_labels]
         for idx,trial in enumerate(zipped):
                 same = [trial == x for x in zipped]
                 pred_RDM[-1,idx,:] = same
