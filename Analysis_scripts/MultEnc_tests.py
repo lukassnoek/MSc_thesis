@@ -4,41 +4,43 @@ Multivariate encoding: TESTS
 
 Lukas Snoek, Programming: The Next Step
 """
+home_dir = '/media/lukas/Data/Matlab2Python/'
+script_dir = '/home/lukas/Dropbox/ResMas_UvA/Thesis/Git/Analysis_scripts/modules/'
 
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics.pairwise import euclidean_distances as euc_dist
 import statsmodels.api as smf
 
+import sys
+sys.path.append(script_dir)
+import MultivariateEncoding as MultEnc
+
 """
 Test 1: Does the manual implementation of multiple regression work
 correctly? 
 """
-
-# Some paramters
 n_trials = 120
-n_features = 5000
-
-# Create predictor
+n_features = 1000
 predictor = np.ones((n_trials, n_trials))
 for i in xrange(3):
     predictor[i*40:(i*40+40),i*40:(i*40+40)] = 0
 
-X = get_lower_half(predictor)
+X = MultEnc.get_lower_half(predictor)
 X = X[:,np.newaxis]
 
 # Create random data and to-be-predicted random RDM
 random_data = np.random.normal(0, 5, size = (n_trials, n_features))
 random_RDM = euc_dist(random_data)    
-y = get_lower_half(random_RDM)
+y = MultEnc.get_lower_half(random_RDM)
 y = y[:,np.newaxis]
 y = y - np.mean(y) # demeaning to avoid fitting intercept
     
 # Use regression from statsmodels package
 model = smf.OLS(y,X)
-results = model.fit() 
-results.params
+results = model.fit()
 results.tvalues
+results.pvalues
 
 # Check against manual implementation
 coeff = np.dot(np.dot(np.linalg.inv(np.dot(X.T, X)),X.T), y)
@@ -71,7 +73,7 @@ p_vals = np.zeros(iterations)
 for i in xrange(iterations):
     random_data = np.random.normal(0, 5, size = (n_trials, n_features))
     random_RDM = euc_dist(random_data)    
-    y = get_lower_half(random_RDM)
+    y = MultEnc.get_lower_half(random_RDM)
     y = y[:,np.newaxis]
     y = y - np.mean(y) # demeaning to avoid fitting intercept
     
@@ -92,4 +94,38 @@ within the distances of the trials from the same class is present in distances
 of trials across classes, which averages out. So I think that regressing
 values from a distance matrix does NOT introduce a bias.
 """
- 
+
+""" Test 3: Does the t-value from the regression of the observed RDM scale
+nicely with the amount of noise added to simulated data?"""
+
+
+simulated = np.ones((n_trials, n_trials))
+for i in xrange(3):
+    simulated[i*40:(i*40+40),i*40:(i*40+40)] = 0
+
+
+noise = np.arange(1,15,0.5)
+t_val = np.zeros(noise.size)
+p_val = np.zeros(noise.size)
+
+for i,ns in enumerate(noise):
+    
+    holder = np.zeros((iterations, 2))
+    for j in xrange(iterations):
+        sim_plus_noise = simulated + np.random.normal(0,ns,(predictor.shape))
+
+        y = MultEnc.get_lower_half(sim_plus_noise - np.mean(sim_plus_noise))
+        model = smf.OLS(y,X)
+        results = model.fit() 
+        holder[j,0] = float(results.tvalues)
+        holder[j,1] = float(results.pvalues)
+    
+    t_val[i] = np.mean(holder[:,0])
+    p_val[i] = np.mean(holder[:,1])
+    
+plt.plot(t_val,linewidth= 3)
+plt.ylabel('T-value')
+plt.xlabel('Noise added (in std of normal dist)')
+plt.title('T-value as a function of noise added to true effect')
+plt.xticks(range(0,t_val.shape[0]), noise)
+
