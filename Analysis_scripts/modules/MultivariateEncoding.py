@@ -51,14 +51,19 @@ Dependencies (all open source):
 - statsmodels
 
 It furthermore depends on single-trial data as processed by FSL's GLM
-toolbox 'FEAT' (all open-source). 
+toolbox 'FEAT' (all open-source): http://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FEAT.
+(ref: M. Jenkinson, C.F. Beckmann, T.E. Behrens, M.W. Woolrich, S.M. Smith. 
+FSL. NeuroImage, 62:782-90, 2012).
+
+This module was created and tested on a Ubuntu 15.04 platform with the
+Spyder 2.7 IDE (using Python version 2.7). It has not been tested on Windows/
+OS X. There could be some problems with path separators (/ vs. \).
 
 Lukas Snoek, spring 2015
 """
+##############################################################################
 
 _author_ = "Lukas Snoek"
-
-##############################################################################
 
 #################### 1. IMPORTING PACKAGES ###################################
 
@@ -79,12 +84,15 @@ import scipy
 
 #################### 2. MAIN ANALYSIS ########################################
     
-def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train, z_thres, verbose = 0):
+def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train, 
+         z_thres, permutations, verbose = 0):
     """ This function performs the main encoding analysis by looping over
     different masks (region of interests, ROIs). For each mask, it creates
     an mvpa_mat (with .data of trials x features from mask) for each subject.
     It subsequently averages de RDMs over subjects and performs the regression
     analyses and stores the t-value corresponding to the mask.
+    Important: This function assumes that it is executed in the FirstLevel
+    directoy!
     
     Args:
         subject_stem:       study-specific subject-prefix (here: 'HWW')
@@ -97,7 +105,7 @@ def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train, z_thres, 
         z_thres:            If prop_train < 1, z_thres refers to the z-value
                             cutoff scores for the difference index during
                             univariate feature selection.
-        verbose:            if 1, subfunctions print output
+        verbose:            if 1, subfunctions print output (default = 0)
     
     Returns:
         t_map:              ndarray of size MNI.shape (91, 109, 91) with 
@@ -126,19 +134,24 @@ def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train, z_thres, 
     
     # Initialize empty t-value map, corresponding list, and mask-indices
     t_map = np.zeros((MNI.get_shape()))
-    t_vals = []
+    t_vals = np.zeros((len(mask_paths)))
+    p_vals = np.zeros((len(mask_paths)))
+    
     mask_indices = np.zeros((len(mask_paths), 
                              MNI_dims[0], 
                              MNI_dims[1], 
                              MNI_dims[2]))
     
+    perm_vec = np.zeros((len(mask_paths), permutations))
+    
     # Loop over masks
     for j,mask in enumerate(mask_paths):
         
         # Create subject matrices with specific maks
-        create_subject_mats(mask,subject_stem,mask_threshold,norm_method = 'univariate')
-        merge_runs()
+        create_subject_mats(mask,subject_stem,mask_threshold,verbose,norm_method = 'univariate')
+        merge_runs(verbose)
         
+        # Define subject paths to pickle files
         rel_paths = glob.glob('mvpa_mats/*' + subject_stem + '*merged.cPickle')
         sub_paths = [os.path.abspath(path) for path in rel_paths]
         
@@ -153,14 +166,20 @@ def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train, z_thres, 
         for i,sub in enumerate(sub_paths):
             mvpa_data = cPickle.load(open(sub))
             RDM_holder[i,:,:],test_idx = create_RDM(mvpa_data, prop_train, z_thres)
-            #t_vals.append(test_RDM(RDM, Reg))
-    
-        # Average RDMs, create regressor, run regression, fill t_map
+         
+        # Average RDMs, create regressor, run regression
         avRDM = np.mean(RDM_holder, axis = 0)
         Reg = create_regressors(mvpa_data,test_idx, plot = 0)
-        t_val = test_RDM(avRDM, Reg)
+        t_vals[j], p_vals[j] = test_RDM(avRDM, Reg)
+        
+        # This is code for a permutation t-test, but it's extremely sensitive;
+        # too sensitive, because everything becomes significant!     
+        #perm_vec[j,:] = permute_RDM(avRDM, Reg, permutations)
+        #p_vals[j] = (np.sum(perm_vec[j,:] > float(t_vals[j]))) / float(permutations)
+        
+        # Fill t-map with t-value for that mask
         mni_idx = mvpa_data.mask_index.reshape(MNI.get_shape())
-        t_map[mni_idx] = t_val
+        t_map[mni_idx] = t_vals[j]
         
         # Save mask-indices
         mask_indices[j,mni_idx] = True  
@@ -168,37 +187,33 @@ def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train, z_thres, 
         # Save RDM object
         class_lab = mvpa_data.class_labels
         mask_name = mvpa_data.mask_name
-        RDM_to_save = RDM(avRDM, t_val, mask_name, mni_idx, class_lab)        
+        RDM_to_save = RDM(avRDM, t_vals[j], mask_name, mni_idx, class_lab)        
         
         with open(RDM_mask_dir + '/' + mask_name[:-7] + '.cPickle', 'wb') as handle:
             cPickle.dump(RDM_to_save, handle)
         
         # Print progress and t-value
-        print "Done processing mask: %s," % os.path.basename(mask),
-        print 't-value = ' + str(t_val), 
-        print ' (' + str(j+1) + '/' + str(len(mask_paths)) + ') '
+        print "Mask: %s," % os.path.basename(mask),
+        print 't-value = %f,' % t_vals[j],
+        print 'p-value = %f' % p_vals[j],
+        print '(' + str(j+1) + '/' + str(len(mask_paths)) + ') '
         
-        t_vals.append(t_val)
-
     # Zip scores(mask, corresponding t-value)
     scores = zip([os.path.basename(mask) for mask in mask_paths], t_vals)    
-    t_list = [tval[1] for tval in scores]
-    mask_list = [mask[0] for mask in scores]
     
     # Convert t_list to array, calculate p-value, and FDR correct
-    t_array = np.hstack(tuple(t_list))
-    pvals = [scipy.stats.t.sf(np.abs(t), n-1)*2 for t in t_array]
-    corrected = sm.multipletests(pvals, method = 'fdr_bh')
+    fdr_corr = sm.multipletests(p_vals, method = 'fdr_bh')
     
     # Set insignificant masks to zero
-    for i,bool_mask in enumerate(corrected[0]):
+    for i,bool_mask in enumerate(fdr_corr[0]):
         if not bool_mask:
             t_map[mask_indices[i,:,:,:].astype(bool)] = 0    
     
     # Plot FDR corrected t-value map
     thres_map = np.ma.masked_less(t_map, 0.1)
     title = 'FDR corrected t-value map'
-    plot_map(thres_map, affine, draw_cross = False, title = title)
+    plot_map(thres_map, affine, draw_cross = False, title = title, 
+             annotate = False)
     
     # Save a nifti file of the t-map to view in e.g. FSLview
     img = nib.Nifti1Image(t_map, np.eye(4))
@@ -695,7 +710,8 @@ def test_RDM(observed, predictors):
         predictors:  predictor RDMs (ndarray, factors x RfDM row x RDM col)
     
     Returns:
-        t_vals:      Array with t_values of length(factors)
+        t_val:      (Array with) t_value(s) of length(factors)
+        p_val:      P-value(s) associated with factor(s)
     """
         
     y = get_lower_half(observed)
@@ -711,29 +727,43 @@ def test_RDM(observed, predictors):
         X = get_lower_half(np.squeeze(predictors))
         X = X[:, np.newaxis]
     
-    # Manual implementation of multiple regression:
-    # beta = (X'X)^-1 X'y 
+    # Changed manual implementation to statsmodels implemenation due to
+    # speed increase
     y = y - np.mean(y) # demeaning to avoid fitting intercept
-    coeff = np.dot(np.dot(np.linalg.pinv(np.dot(X.T, X)),X.T), y)
-    y_hat = np.dot(coeff, X.T) # y-predicted
+    model = smf.OLS(y,X)
+    results = model.fit() 
+    t_val = float(results.tvalues)
+    p_val = float(results.pvalues)
     
-    # Calculating standard error of coefficient:
-    # SE = sqrt(MSE * diag((X'X)^-1))
-    MSE = np.mean((y - y_hat)**2)
-    var_est = MSE * np.diag(np.linalg.pinv(np.dot(X.T,X)))
-    SE_est = np.sqrt(var_est)    
-    
-    # t-values for coefficients (array)
-    t_vals = coeff / SE_est
-    
-    return(t_vals)
+    return(t_val, p_val)
 
 def get_lower_half(mat):
     """ Returns the lower triangular WITHOUT diagonal for a given matrix """
     idx = np.tril_indices(np.sqrt(mat.size), -1)
     return(mat[idx])
     
-   
+def permute_RDM(avRDM, predictors, iterations):
     
+    t_vals = np.zeros(iterations)
+    p_vals = np.zeros(iterations)
+    y = get_lower_half(euc_dist(mvpa_data.data))
+    y = y - np.mean(y) # demeaning to avoid fitting intercept
+    X = [predictors[i,:,:] for i in range(predictors.shape[0])]        
     
+    if len(X) > 1:    
+        X = [get_lower_half(item) for item in X] 
+        X = np.vstack(tuple(X)).T
+    else:
+        X = get_lower_half(np.squeeze(predictors))
+        X = X[:, np.newaxis]
+    
+    for it in xrange(iterations):    
+        np.random.shuffle(X)
+
+        model = smf.OLS(y,X)
+        results = model.fit() 
+        t_vals[it] = float(results.tvalues)
+        p_vals[it] = float(results.pvalues)
+    
+    return(t_vals, p_vals)
     
