@@ -80,12 +80,12 @@ import matplotlib.pyplot as plt
 from sklearn.metrics.pairwise import euclidean_distances as euc_dist
 import itertools
 import statsmodels.sandbox.stats.multicomp as sm
-import scipy
+import statsmodels.api as smf
 
 #################### 2. MAIN ANALYSIS ########################################
     
 def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train, 
-         z_thres, permutations, verbose = 0):
+         z_thres, verbose = 0):
     """ This function performs the main encoding analysis by looping over
     different masks (region of interests, ROIs). For each mask, it creates
     an mvpa_mat (with .data of trials x features from mask) for each subject.
@@ -137,14 +137,15 @@ def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train,
     t_vals = np.zeros((len(mask_paths)))
     p_vals = np.zeros((len(mask_paths)))
     
-    mask_indices = np.zeros((len(mask_paths), 
-                             MNI_dims[0], 
-                             MNI_dims[1], 
-                             MNI_dims[2]))
+    # This variable will store the indices of each mask
+    mask_indices = np.zeros((len(mask_paths), MNI_dims[0], MNI_dims[1],MNI_dims[2]))
     
-    perm_vec = np.zeros((len(mask_paths), permutations))
+    # This was a vector to store permutation statistics, but I decided to 
+    # use standard significance testing instead, because permutation-statistics
+    # appeared to be extremely liberal.
+    #perm_vec = np.zeros((len(mask_paths), permutations))
     
-    # Loop over masks
+    # Start loop over masks (ROIs)
     for j,mask in enumerate(mask_paths):
         
         # Create subject matrices with specific maks
@@ -168,12 +169,11 @@ def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train,
             RDM_holder[i,:,:],test_idx = create_RDM(mvpa_data, prop_train, z_thres)
          
         # Average RDMs, create regressor, run regression
-        avRDM = np.mean(RDM_holder, axis = 0)
-        Reg = create_regressors(mvpa_data,test_idx, plot = 0)
-        t_vals[j], p_vals[j] = test_RDM(avRDM, Reg)
+        av_RDM = np.mean(RDM_holder, axis = 0)
+        Predictors = create_regressors(mvpa_data,test_idx, plot = 0)
+        t_vals[j], p_vals[j] = test_RDM(av_RDM, Predictors)
         
-        # This is code for a permutation t-test, but it's extremely sensitive;
-        # too sensitive, because everything becomes significant!     
+        # Old permutation code (not used anymore)        
         #perm_vec[j,:] = permute_RDM(avRDM, Reg, permutations)
         #p_vals[j] = (np.sum(perm_vec[j,:] > float(t_vals[j]))) / float(permutations)
         
@@ -184,10 +184,10 @@ def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train,
         # Save mask-indices
         mask_indices[j,mni_idx] = True  
         
-        # Save RDM object
+        # Save RDM object (reuse attributes from last mvpa_mat instance)
         class_lab = mvpa_data.class_labels
         mask_name = mvpa_data.mask_name
-        RDM_to_save = RDM(avRDM, t_vals[j], mask_name, mni_idx, class_lab)        
+        RDM_to_save = RDM(av_RDM, t_vals[j], mask_name, mni_idx, class_lab)        
         
         with open(RDM_mask_dir + '/' + mask_name[:-7] + '.cPickle', 'wb') as handle:
             cPickle.dump(RDM_to_save, handle)
@@ -201,7 +201,7 @@ def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train,
     # Zip scores(mask, corresponding t-value)
     scores = zip([os.path.basename(mask) for mask in mask_paths], t_vals)    
     
-    # Convert t_list to array, calculate p-value, and FDR correct
+    # FDR correction!
     fdr_corr = sm.multipletests(p_vals, method = 'fdr_bh')
     
     # Set insignificant masks to zero
@@ -691,14 +691,19 @@ def plot_RDM(design, n_fact, pred_RDM):
         
     fig = plt.figure()
     for plot in xrange(n_plot):
+        
         plt.subplot(1, n_plot, plot+1)
-        plt.imshow(pred_RDM[plot,:,:])
+        plt.imshow(pred_RDM[plot,:,:], origin='lower')
+        
         if plot != (n_plot-1) or plot == 0:
             plt.title('Factor ' + str(plot+1))
         else:
             plt.title('Interaction')
-    plt.colorbar()
         
+        plt.colorbar(label = 'Euclidian distance')
+        plt.xlabel('Trials')
+        plt.ylabel('Trials')    
+      
 def test_RDM(observed, predictors):
     """
     test_RDM regresses the observed RDM onto the predictor RDMs as created 
