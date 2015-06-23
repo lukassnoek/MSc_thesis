@@ -211,9 +211,10 @@ def main(subject_stem, mask_dir, mask_threshold, MNI_path, prop_train,
     
     # Plot FDR corrected t-value map
     thres_map = np.ma.masked_less(t_map, 0.1)
-    title = 'FDR corrected t-value map'
+    title = ''
     plot_map(thres_map, affine, draw_cross = False, title = title, 
              annotate = False)
+    plt.savefig(os.path.join(os.getcwd(), 'plot_tmap.png'))
     
     # Save a nifti file of the t-map to view in e.g. FSLview
     img = nib.Nifti1Image(t_map, np.eye(4))
@@ -688,8 +689,7 @@ def plot_RDM(design, n_fact, pred_RDM):
         n_plot = 1
     else:
         n_plot = n_fact
-        
-    fig = plt.figure()
+            
     for plot in xrange(n_plot):
         
         plt.subplot(1, n_plot, plot+1)
@@ -699,11 +699,10 @@ def plot_RDM(design, n_fact, pred_RDM):
             plt.title('Factor ' + str(plot+1))
         else:
             plt.title('Interaction')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(os.getcwd(), 'predictor_RDM.png'))
         
-        plt.colorbar(label = 'Euclidian distance')
-        plt.xlabel('Trials')
-        plt.ylabel('Trials')    
-      
 def test_RDM(observed, predictors):
     """
     test_RDM regresses the observed RDM onto the predictor RDMs as created 

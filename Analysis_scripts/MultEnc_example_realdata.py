@@ -94,12 +94,17 @@ plt.colorbar(label = 'Euclidian distance')
 plt.xlabel('Trials')
 plt.ylabel('Trials')    
 plt.title('RDM of %s' % subject_x.mask_name)
-plt.show()
 
+plt.savefig(os.path.join(home_dir,'example_RDM.png'))
+    
 # We can formalize our hypothesis (i.e. trials across classes are more dis-
 # similar than trials within classes) by creating a "predictor RDM", in which
 # trials within classes have a predicted distance of 0, and between classes 
 # a distance of 1.   
+fact1 = ['A'] * 40 + ['B'] * 40 + ['C'] * 40
+fact2 = [1] * 20 + [2] * 20 + [1] * 20 + [2] * 20 + [1] * 20 + [2] * 20
+subject_x.class_labels = zip(fact1,fact2)
+
 predictor_RDM = MultEnc.create_regressors(subject_x, test_idx, plot = 1)
 
 # Let's check whether the observed RDM contains any information about 

@@ -66,12 +66,12 @@ do an regression onto random data to see whether it returns an inflated
 number of false positives 
 """
 
-iterations = 1000
+iterations = 2000
 t_vals = np.zeros(iterations)
 p_vals = np.zeros(iterations)
 
 for i in xrange(iterations):
-    random_data = np.random.normal(0, 5, size = (n_trials, n_features))
+    random_data = np.random.normal(0, 3, size = (n_trials, n_features))
     random_RDM = euc_dist(random_data)    
     y = MultEnc.get_lower_half(random_RDM)
     y = y[:,np.newaxis]
@@ -84,6 +84,20 @@ for i in xrange(iterations):
     print str(i)
 
 n_falsepos = np.sum(p_vals < 0.05) / float(iterations)
+
+f, axarr = plt.subplots(1,2)
+axarr[0].hist(t_vals, 15)
+axarr[0].set_title('T-value distribution')
+axarr[0].set_xlabel('Count')
+axarr[0].set_ylabel('T-value')
+
+axarr[1].hist(p_vals, 15)
+axarr[1].set_title('P-value distribution')
+axarr[1].set_xlabel('Count')
+axarr[1].set_ylabel('P-value')
+
+f.tight_layout()
+f.savefig(os.path.join(os.getcwd(),'tdist_test.png'))
 
 print "Over %i iterations, nr. of false positives: %s" % (iterations, n_falsepos)
 
@@ -128,4 +142,5 @@ plt.ylabel('T-value')
 plt.xlabel('Noise added (in std of normal dist)')
 plt.title('T-value as a function of noise added to true effect')
 plt.xticks(range(0,t_val.shape[0]), noise)
+
 
