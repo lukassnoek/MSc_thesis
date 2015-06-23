@@ -30,7 +30,7 @@ def call_flirt(file_type):
         mni_file = reg_dir + '/standard.nii.gz'
         premat_file = reg_dir + '/example_func2highres.mat'
         
-        if file_type == 'res4d':
+        if file_type == 'res4d' or file_type == 'func':
             warp_file = reg_dir + '/highres2standard_warp.nii.gz'
             to_transform = stats_dir + '/res4d.nii.gz'
             out_name = stats_mni_dir + '/res4d_mni.nii.gz'
@@ -51,7 +51,7 @@ def call_flirt(file_type):
                       " --interp=trilinear")
             print "Transformed " + str(len(to_transform)) + " files"         
         
-        elif file_type == 'res4d':
+        elif file_type == 'res4d' or file_type == 'func':
             os.system("applywarp --ref=" + mni_file + 
                       " --in=" + to_transform + 
                       " --out=" + out_name + 
