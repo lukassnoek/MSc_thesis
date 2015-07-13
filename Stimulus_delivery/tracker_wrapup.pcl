@@ -1,0 +1,20 @@
+
+logfile.save();
+
+#stop recording.
+wait_interval(100);
+tracker.set_recording(false);
+wait_interval(1000);
+string msg= "TRIAL_RESULT ";
+msg.append(string(0));
+tracker.send_message(msg);
+
+wait_interval(1000);
+#transfer the edf file. Note Presentation places files specified without a path in the user's home directory.
+#in this example pres_1.edf will be placed in your home directory. (eg. in xp C:\documents and settings\<username>
+string edf_fname = logfile_directory + edf_name;
+tracker.set_parameter("get_edf_file",edf_fname);
+
+wait_interval(1000);
+
+tracker.stop_tracking();
