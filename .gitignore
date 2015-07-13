@@ -8,19 +8,33 @@
 *.dvi
 *.out
 *.brf
+*count.txt
 
 # Python and other programming stuff
-*.Rhistory
-*et al.*
-*.gitattributes
-*.mat
 *.pyc
 *.py~
 *.ipynb_checkpoints/
+
+# Articles
+*.pdf
+*et al*
+
+# Git stuff
+*.gitattributes
 *.*~
-*count.txt
+
+# Matlab
+*.mat
+
+# R stuff
 *concordance*
+*.Rhistory
+*.sty
+
+# Other
 *.rtf
 */figure/*
-*.sty
 *.wav
+Stimulus_delivery/log/*
+*.jpg
+*.JPG
