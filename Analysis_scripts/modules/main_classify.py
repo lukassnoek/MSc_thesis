@@ -48,6 +48,11 @@ def select_voxels(mvpa, train_idx, threshold):
         diff_patterns[i,] = np.abs((x - x.mean()) / x.std()) 
     
     diff_vec = np.mean(diff_patterns, axis = 0)
+    
+    if np.sum(feat_idx) == 0:
+                 raise ValueError('Z-threshold too high! No voxels selected ' \
+                 + 'at iteration ' + str(i) + ' for ' + sub_dir)
+            
     return(diff_vec > threshold)
    
 def mvpa_classify(iterations, n_test, zval):
@@ -76,11 +81,6 @@ def mvpa_classify(iterations, n_test, zval):
             train_idx = np.invert(test_idx)
             feat_idx = select_voxels(mvpa,train_idx,zval)
             
-            print str(i)
-            if np.sum(feat_idx) == 0:
-                 raise ValueError('Z-threshold too high! No voxels selected ' \
-                 + 'at iteration ' + str(i) + ' for ' + sub_dir)
-                            
             train_data = mvpa.data[train_idx,:][:,feat_idx]
             test_data = mvpa.data[test_idx,:][:,feat_idx]
         
