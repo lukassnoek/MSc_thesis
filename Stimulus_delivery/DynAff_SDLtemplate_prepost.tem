@@ -1,0 +1,208 @@
+# INTRODUCTIONS pretest
+
+text {
+	caption = 	
+	"In dit deel van het experiment krijg je een aantal afbeeldingen meerdere keren te zien. \n
+	Na sommige afbeeldingen zal je worden gevraagd om aan te geven hoe positief of negatief jij deze
+	afbeelding heb ervaren, van 'Heel erg negatief' tot 'Heel erg positief'. \n
+	Je kan het keuze-hokje als volgt bewegen met je rechterhand: \n
+		Naar LINKS: wijsvinger 
+		Naar RECHTS: ringvinger 
+		BEVESTIGEN: middelvinger \n
+		
+	Druk op één van de knoppen om verder te gaan."; 
+
+} introduction1;
+
+text {
+	caption =
+	"Je krijgt nu een voorbeeld te zien hoe je straks de plaatjes gaat beoordelen. \n
+	Er verschijnt een plaatje in beeld, waarna jij dit plaatje op een schaal van 
+	'Heel erg negatief' tot 'Heel erg positief' moet beoordelen. \n
+	Je beweegt de keuze-box met je wijs- en ringvinger van je rechter hand.
+	Je bevestigt de keuze met je middelvinger. \n
+	
+	Als je er klaar voor bent, dan kan je op één van de knoppen druk om met het voorbeeld te beginnen.";
+
+} introduction2;
+
+text {
+	caption =
+	"Tijdens de taak is het belangrijk dat je naar het fixatie-kruis (+) blijft kijken
+	tussen de presentaties van de afbeeldingen. Ook is het belangrijk dat je je ogen
+	open houdt en niet in slaap valt! \n \n
+	Druk op een knop om te beginnen.";
+} introduction3;
+
+text {
+	caption =
+	"Tijdens de taak is het belangrijk dat je naar het fixatie-kruis (+) blijft kijken
+	tussen de presentaties van de afbeeldingen. Ook is het belangrijk dat je je ogen
+	open houdt en niet in slaap valt! \n \n
+	Druk op een knop om te beginnen.";
+} introduction_post;
+
+text {
+	caption =
+	"Tijdens deze taak krijg je een aantal afbeeldingen te zien.
+	Kijk hier goed naar en houd je aandacht erbij.
+	Blijf tussen de afbeeldingen in naar het fixatie-kruis (+) kijken. \n \n
+	Druk op een knop om te beginnen.";
+} introduction_stimdriv;
+
+picture {text introduction1; x = 0; y = 0;} introduction_picture1;
+picture {text introduction2; x = 0; y = 0;} introduction_picture2;
+picture {text introduction3; x = 0; y = 0;} introduction_picture3;
+picture {text introduction_post; x = 0; y = 0;} introduction_postpic;
+picture {text introduction_stimdriv; x = 0; y = 0;} introduction_stimdrivpic;
+
+# Intro trial
+trial {all_responses	= true; trial_type = first_response; trial_duration = forever;
+		stimulus_event {picture introduction_picture1; time = 0;} introduction_event;} introduction_trial;
+
+# Intro trial
+trial {all_responses	= true; trial_type = first_response; trial_duration = forever;
+		stimulus_event {picture introduction_picture2; time = 0;} introduction_event2;} introduction_trial2;
+
+# Intro trial
+trial {all_responses	= true; trial_type = first_response; trial_duration = forever;
+		stimulus_event {picture introduction_picture3; time = 0;} introduction_event3;} introduction_trial3;
+
+# Intro trial
+trial {all_responses	= true; trial_type = first_response; trial_duration = forever;
+		stimulus_event {picture introduction_postpic; time = 0;} introduction_eventpost;} introduction_trialpost;
+
+# Intro trial
+trial {all_responses	= true; trial_type = first_response; trial_duration = forever;
+		stimulus_event {picture introduction_stimdrivpic; time = 0;} introduction_eventstimdriv;} introduction_trialstimdriv;
+
+# Experimental bitmap
+bitmap {filename = ""; preload = false;} exp_bitmap;
+
+# End
+text {
+			caption = 	"Dit is het einde van dit deel van het experiment."; 
+			font =		"arial";		
+			font_size = 25;} 
+			end;
+
+# Choice box
+line_graphic { 
+	coordinates = -120.0, 50.0, 120.0, 50.0;
+	coordinates = -120.0, -50.0, 120.0, -50.0;
+	coordinates = -120.0, 54.0, -120.0, -54.5;
+	coordinates =  120.0, 54.0, 120.0, -54.5;
+	line_width = 10;
+} choice_box;
+
+# --------------- SDL definitions: PICTURES --------------- #
+
+# ISI
+picture {text {caption = "+"; font_size = 40; background_color = 0,0,0;}; x=0; y=0;} ISI_picture;
+
+# Intro
+picture {text { caption = "We gaan bijna beginnen! \n Even wachten op de scanner..."; font="arial"; font_size = 20;}; x=0; y=0;} pulsetrial;
+
+# End
+picture {text end; x = 0; y = 0;} end_picture;
+
+# Experimental picture
+picture {bitmap exp_bitmap; x = 0; y = 0;} experimental_picture;
+	
+# Evaluation text
+picture {
+	#text { caption = "Hoe positief of negatief vond je het vorige plaatje?"; font_size = 40;} instructie; x = 0; y = 300; 
+	
+	text { caption = "Zeer onpretting"; font_size = 30;} zeeronprettig; x = -750; y = 150;
+	text { caption = "-3"; font_size = 40;} min3; x = -750; y = 0;
+   text { caption = "-2"; font_size = 40;} min2; x = -500; y = 0;
+   text { caption = "-1"; font_size = 40;} min1; x = -250; y = 0;
+   
+	text { caption = "Neutraal"; font_size = 30;} neutraal; x = 0; y = 150;
+	text { caption = "0"; font_size = 40;} nul; x = 0; y = 0;
+	
+   text { caption = "+1"; font_size = 40;} plus1; x = 250; y = 0;
+	text { caption = "+2"; font_size = 40;} plus2; x = 500; y = 0;
+	text { caption = "+3"; font_size = 40;} plus3; x = 750; y = 0;
+	text { caption = "Zeer prettig"; font_size = 30;} zeerprettig; x = 750; y = 150;
+	
+} evaluation_text;
+
+# a picture for text input (getFilename)
+picture {
+	text { 
+		caption = "Enter the output filename:"; font_color=255,255,255; };
+		x = 0; y = 100;
+		text { 
+			caption = " "; } text2;
+		x = 0; y = 0;
+} askMe;
+
+# a picture for text input (getFilename)
+picture {
+	text { 
+		caption = "Enter version (e.g. vs123123):"; font_color=255,255,255; };
+		x = 0; y = 100;
+		text { 
+			caption = " "; } text3;
+		x = 0; y = 0;
+} askMe2;
+
+picture {background_color = 128,128,128;} et_calibration;
+
+# --------------- SDL definitions: TRIALS --------------- #
+
+# Log-trial
+trial {
+   picture askMe;
+} getOutput;
+
+trial {
+   picture askMe2;
+} getOutput2;
+
+# Experimental trial
+trial {
+	stimulus_event {
+		picture experimental_picture;
+		duration = 2000;
+	} experimental_event;
+} experimental_trial; 
+
+# Practice-trial
+trial {
+	stimulus_event {
+		picture experimental_picture;
+		duration = 2000;
+	} practice_event;
+} practice_trial; 
+
+# Evaluation trial: GO
+trial {
+	trial_duration = forever;
+	trial_type = specific_response;
+	terminator_button = 1,2,3;
+	
+	stimulus_event {
+		picture evaluation_text; 
+	} text_event;
+} evaluation_trial;
+
+# Evaluation trial: STOP
+trial {
+	trial_duration = 500;
+	
+	stimulus_event {
+		picture evaluation_text; 
+	} stop_event;
+} stop_trial;
+
+# End trial
+trial {
+	trial_duration = 5000; 
+	stimulus_event {
+		picture end_picture;
+		delta_time = 2000;
+	} end_event;
+} end_trial;
+

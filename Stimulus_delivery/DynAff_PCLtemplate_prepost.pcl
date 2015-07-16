@@ -1,0 +1,86 @@
+# --------------- (STIMULI) ARRAYS ----------- #
+
+int stim_dur = 2000;
+
+# Stimuli
+array <string> face_stim[3] =
+	{"char1.jpg", 
+	 "char2.jpg", 
+    "char3.jpg"};
+
+array <string> house_stim[3] =
+	{"loc_janos.jpg", 
+	 "loc_matthias.jpg", 
+	 "loc_benji.jpg"};
+
+# Array (randomly) listing conditions which correspond to the stimuli (no NULL)
+array <int> stimuli_condition[48] =
+	{	10, 10, 10, 10, 10, 10, 10, 10,
+		11, 11, 11, 11, 11, 11, 11, 11,
+		12, 12, 12, 12, 12, 12, 12, 12,
+		20, 20, 20, 20, 20, 20, 20, 20,
+		21, 21, 21, 21, 21, 21, 21, 21, 
+		22, 22, 22, 22, 22, 22, 22, 22
+	}; # 10-12 = face, 20-22 = house
+
+stimuli_condition.shuffle(); # randomization
+
+# Array for random selection of evaluation for each trial
+# 0 = no evaluation, 1 = evaluation
+array <int> face1_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; face1_eval.shuffle();
+array <int> face2_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; face2_eval.shuffle();
+array <int> face3_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; face3_eval.shuffle();
+array <int> house1_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; house1_eval.shuffle();
+array <int> house2_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; house2_eval.shuffle();
+array <int> house3_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; house3_eval.shuffle();
+
+# Initial position of choice-box (x - coordinate)
+array <int> box_position[7] =
+	{-750, -500, -250, 0, 250, 500, 750};
+
+# Some variable definitions/initializations
+int stimulus_category = 0; 
+
+int i_f1 = 1; int i_f2 = 1; int i_f3 = 1; # face-counters
+int i_h1 = 1; int i_h2 = 1; int i_h3 = 1; # house-coutners
+
+# Value for evaluation yes/no (0 = no)
+int go_eval = 0;
+int ISI = 4000; # Separately defined here
+int start_pic = 0;
+int onsett = 0;
+int timer = 0;
+
+# Ask for logfile-name
+getOutput.present();
+string filename = system_keyboard.get_input(askMe,text2);
+
+# Ask for version
+getOutput.present();
+string version = system_keyboard.get_input(askMe2,text3);
+
+# Get indices for stimulus locations
+int idx_char_jan = int(version.substring(3,1)); 
+int idx_char_mat = int(version.substring(4,1)); 
+int idx_char_ben = int(version.substring(5,1));
+int idx_loc_jan = int(version.substring(6,1)); 
+int idx_loc_mat = int(version.substring(7,1));
+int idx_loc_ben = int(version.substring(8,1));
+
+# Recode according to version
+face_stim[1] = face_stim[idx_char_jan]; 
+face_stim[2] = face_stim[idx_char_mat];
+face_stim[3] = face_stim[idx_char_ben];
+house_stim[1] = house_stim[idx_loc_jan];
+house_stim[2] = house_stim[idx_loc_mat];
+house_stim[3] = house_stim[idx_loc_ben];
+
+array <int> sitpos_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; sitpos_eval.shuffle();
+array <int> sitneg_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; sitneg_eval.shuffle();
+array <int> sitneu_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; sitneu_eval.shuffle();
+array <int> facpos_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; facpos_eval.shuffle();
+array <int> facneg_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; facneg_eval.shuffle();
+array <int> facneu_eval[8] = {1, 0, 0, 0, 0, 0, 0, 0}; facneu_eval.shuffle();
+
+array <int> eval_counters[8] = {0,0,0,0,0,0};
+

@@ -1,0 +1,100 @@
+sub wait(int startpoint, int length) begin;
+	loop until clock.time() > (startpoint + length) begin end;
+end;
+
+sub wait_ISI(int startpoint, int length) begin;
+	ISI_picture.present();
+	loop until clock.time() > (startpoint + length) begin end;
+end;
+
+sub run_evaluation(int confirm, int int_pos, int toMove, int j) begin;
+	# Evaluation
+	loop until confirm == 1 begin
+		
+		if j == 1 then
+			int_pos = box_position[1];
+			evaluation_text.add_part(choice_box,int_pos,0);
+			evaluation_trial.present();
+		end;
+		
+		if response_manager.last_response() == 1  then
+			toMove = int_pos - 250;
+			
+			if toMove < - 750 then toMove = -750; end;
+	
+			evaluation_text.remove_part(11);
+			evaluation_text.add_part(choice_box,toMove,0);
+			evaluation_trial.present();
+		
+		elseif response_manager.last_response() == 3 then
+			toMove = int_pos + 250;
+		
+			if toMove > 750 then toMove = 750; end;
+	
+			evaluation_text.remove_part(11);
+			evaluation_text.add_part(choice_box,toMove,0);
+			evaluation_trial.present();
+		
+		elseif response_manager.last_response() == 2 then
+			start_pic = clock.time();
+			
+			if toMove == 1000 then
+				out.print(string((int_pos+1000)/250));
+				stop_event.set_event_code(string((int_pos+1000)/250));
+			else
+				out.print(string((toMove+1000)/250));
+				stop_event.set_event_code(string((toMove+1000)/250));
+			end;
+				
+			out.print("\n");
+			choice_box.set_line_color(0, 200, 0, 255);
+			choice_box.redraw();
+			confirm = 1;
+		
+			stop_trial.present();
+			evaluation_text.remove_part(11);
+			ISI_picture.present();
+			loop until clock.time() > (start_pic+2000) begin end;
+		end;
+
+		int_pos = toMove;
+		j = j + 1; 
+			
+	end;
+
+	choice_box.set_line_color(255, 255, 255, 255);	
+	choice_box.redraw();
+end;
+
+sub int update_eval_counter(int counter_idx) begin;
+	
+	int to_return;
+	
+	if counter_idx < 9 then 
+		eval_counters[1] = eval_counters[1] + 1;
+		to_return = sitpos_eval[eval_counters[1]];
+		
+	elseif counter_idx < 17 then 
+		eval_counters[2] = eval_counters[2] + 1;
+		to_return = sitneg_eval[eval_counters[2]];
+	
+	elseif counter_idx < 25 then 
+		eval_counters[3] = eval_counters[3] + 1;
+		to_return = sitneu_eval[eval_counters[3]];
+		
+	elseif counter_idx < 33 then 
+		eval_counters[4] = eval_counters[4] + 1;
+		to_return = facpos_eval[eval_counters[4]];
+		
+	elseif counter_idx < 41 then 
+		eval_counters[5] = eval_counters[5] + 1;
+		to_return = facneg_eval[eval_counters[5]];
+		
+	elseif counter_idx < 49 then 
+		eval_counters[6] = eval_counters[6] + 1;
+		to_return = facneu_eval[eval_counters[6]];
+	
+	end;
+	return to_return;
+end;
+	
