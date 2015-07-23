@@ -1,0 +1,93 @@
+eye_tracker tracker; 
+
+#initialize PresLink (ACQ2).
+if trk_test == 1 then
+	tracker = new eye_tracker( "Mouse Test Server" );  # VOOR 'T NEPPIE
+else
+	tracker = new eye_tracker( "PresLink" );				# VOOR 'T ECHIE
+end;
+
+#connect to Eyelink tracker.
+tracker.start_tracking();
+
+string tracker_ver = tracker.get_parameter("tracker_version");
+
+#tracker_ver would be something like EYELINK CL 4.48, but we want to get the 4.48
+double tr_v=4.0;
+array <string> starr[5];
+tracker_ver.split(" ",starr);
+if starr.count()>2 then
+	tr_v = double(starr[3]);
+end;
+
+#open edf file on the tracker.
+string edf_name = "track.edf"; 
+if(logfile.subject().count() >0) then
+	if logfile.subject().count() > 8 then
+		exit("Avoid using subjectnames with more than eight characters if using Presentation and Eyelink.");
+	else
+		edf_name = logfile.subject() + filename_suffix + ".edf";
+	end;
+end;
+tracker.set_parameter("open_edf_file",edf_name);
+
+tracker.send_command("sample_rate = 250"); 
+#set preamble
+#tracker.send_command("add_file_preamble_text 'da'");
+
+tracker.set_parameter("file_event_filter", "LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT");		   
+tracker.set_parameter("link_event_filter","LEFT,RIGHT,FIXATION,SACCADE,BLINK,BUTTON");
+
+if (tr_v >=4.0) then
+	tracker.set_parameter("link_sample_data" ,"LEFT,RIGHT,GAZE,GAZERES,AREA,STATUS,PUPIL");
+	tracker.set_parameter("file_sample_data",  "LEFT,RIGHT,GAZE,AREA,GAZERES,STATUS,PUPIL,INPUT");
+else
+	tracker.set_parameter("link_sample_data","LEFT,RIGHT,GAZE,GAZERES,AREA,STATUS"); 
+	tracker.set_parameter("file_sample_data",  "LEFT,RIGHT,GAZE,AREA,GAZERES,STATUS,INPUT");
+end;
+
+#program button #5 for use in drift correction
+tracker.send_command("button_function 5 'accept_target_fixation'"); 
+
+#tell the tracker to use 9 point calibration.
+tracker.set_parameter("calibration_type","HV9");
+tracker.set_parameter("enable_cal_dc_sound","0");
+
+#tell PresLink that we need gaze data for both eyes (if available)
+tracker.start_data( et_left, dt_position, false );
+
+	#-----------------------CALIBRATION----------------------	
+	# 
+	#tell PresLink to use the target.bmp as the target - taken from stimulus_directory. 
+	#otherwise the default crosshairs target will be displayed.
+	#string target_fname  = stimulus_directory +"target.bmp"; 
+	#tracker.set_parameter("target_file",target_fname); 
+
+	#clear out the default calibration target so that we don't get data from previous drawing.
+	et_calibration.set_background_color(128,128,128);
+	et_calibration.clear(); 
+	et_calibration.present();
+	
+
+	#start calibration with camera support
+	tracker.calibrate( et_calibrate_default, 1.0, 0.0, 0.0 );
+
+	#drift correct at (0,0) with the options to allow Camera Setup and to draw a target
+	tracker.calibrate( et_calibrate_drift_correct, 7.0, 0.0, 0.0 );
+	
+	
+	#
+	#Send viewer integration messages and tracker commands to monitor recording.
+	#
+	tracker.send_command("clear_screen 0");
+
+
+
+
+	#set the the tracker to idle mode.
+	tracker.send_command("set_idle_mode");
+	#give some time for the tracker to switch mode.
+	wait_interval(50);
+   #start recording
+	tracker.set_recording(true);
+

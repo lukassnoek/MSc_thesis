@@ -1,0 +1,193 @@
+# INTRODUCTIONS pretest
+
+text {
+	caption = 	
+	"Je krijgt straks een aantal afbeeldingen te zien. Het is belangrijk dat je bij elke afbeelding 
+    je - in stilte - richt op hoe prettig of onprettig je die afbeelding ervaart.
+	 Bij sommige afbeeldingen wordt je ook gevraagd om hierover een beoordeling te maken. \n
+
+	 Je kunt bij deze beoordeling kiezen uit de volgende schaalpunten:";
+ 
+	font_size = 30;
+} introtext1_part1;
+
+text {
+	caption = 
+	"We willen je vragen om bij elke afbeelding in je hoofd te bepalen hoe prettig of onprettig 
+    je de afbeelding ervaart. Het is belangrijk dat je dit doet ongeacht of er een beoordeling 
+    volgt of niet.";
+	font_size = 30;
+} introtext1_part2;
+
+picture {text introtext1_part1; x = 0; y = 320;
+			text { caption = "Zeer onpretting"; font_size = 30;} zeeronprettig; x = -800; y = -50;
+			text { caption = "-5"; font_size = 40;} m5; x = -750; y = -150;
+			text { caption = "-4"; font_size = 40;} m4; x = -600; y = -150;
+			text { caption = "-3"; font_size = 40;} m3; x = -450; y = -150;
+			text { caption = "-2"; font_size = 40;} m2; x = -300; y = -150;
+			text { caption = "-1"; font_size = 40;} m1; x = -150; y = -150;
+   
+			text { caption = "Neutraal"; font_size = 30;} neutral; x = 0; y = -50;
+			text { caption = "0"; font_size = 40;} zero; x = 0; y = -150;
+	
+			text { caption = "+1"; font_size = 40;} p1; x = 150; y = -150;
+			text { caption = "+2"; font_size = 40;} p2; x = 300; y = -150;
+			text { caption = "+3"; font_size = 40;} p3; x = 450; y = -150;
+			text { caption = "+4"; font_size = 40;} p4; x = 600; y = -150;
+			text { caption = "+5"; font_size = 40;} p5; x = 750; y = -150;
+			text { caption = "Zeer prettig"; font_size = 30;} zeerprettig; x = 800; y = -50;
+			
+			text introtext1_part2; x = 0; y = -350;
+} intropic1;
+
+trial {all_responses	= true; trial_type = first_response; trial_duration = forever;
+		stimulus_event {picture intropic1; time = 0;} introevent1;} introtrial1;
+
+text {
+	caption =
+	"Tijdens deze taak is het belangrijk dat je, wanneer je geen plaatje ziet, naar het fixatie-kruis (+)
+	 blijft kijken. Ook is het belangrijk dat je je ogen open houdt en niet in slaap valt! \n \n
+	 Druk op een knop om te beginnen.";
+	font_size = 30;
+} introtext2;
+
+picture {text introtext2; x = 0; y = 0;} intropic2;
+
+# Intro trial
+trial {all_responses	= true; trial_type = first_response; trial_duration = forever;
+		stimulus_event {picture intropic2; time = 0;} introevent2;} introtrial2;
+
+# -------------- other stuff --------------- #
+
+# Experimental bitmap
+bitmap {filename = ""; preload = false;} exp_bitmap;
+
+# End
+text {
+			caption = 	"Dit is het einde van dit deel van het experiment."; 
+			font =		"arial";		
+			font_size = 25;} 
+end;
+
+# Choice box
+line_graphic { 
+	coordinates = -80.0, 50.0, 80.0, 50.0;
+	coordinates = -80.0, -50.0, 80.0, -50.0;
+	coordinates = -80.0, 54.0, -80.0, -54.5;
+	coordinates =  80.0, 54.0, 80.0, -54.5;
+	line_width = 10;
+} choice_box;
+
+# --------------- SDL definitions: PICTURES --------------- #
+
+# ISI
+picture {text {caption = "+"; font_size = 40; background_color = 0,0,0;}; x=0; y=0;} ISI_picture;
+
+# Pulsetrial
+picture {text { caption = "We gaan bijna beginnen! \n Even wachten op de scanner..."; font="arial"; font_size = 20;}; x=0; y=0;} pulsetrial;
+
+# End
+picture {text end; x = 0; y = 0;} end_picture;
+
+# Experimental picture
+picture {bitmap exp_bitmap; x = 0; y = 0;} experimental_picture;
+	
+# Evaluation text
+picture {
+	#text { caption = "Hoe positief of negatief vond je het vorige plaatje?"; font_size = 40;} instructie; x = 0; y = 300; 
+	
+	text zeeronprettig; x = -800; y = 150;
+	text m5; x = -750; y = 0;
+	text m4; x = -600; y = 0;
+	text m3; x = -450; y = 0;
+	text m2; x = -300; y = 0;
+	text m1; x = -150; y = 0;
+	text neutral; x = 0; y = 150;
+	text zero; x = 0; y = 0;
+	text p1; x = 150; y = 0;
+	text p2; x = 300; y = 0;
+	text p3; x = 450; y = 0;
+	text p4; x = 600; y = 0;
+	text p5; x = 750; y = 0;
+	text zeerprettig; x = 800; y = 150;
+	
+} evaluation_text;
+
+# a picture for text input (getFilename)
+picture {
+	text { 
+		caption = "Enter the output filename:"; font_color=255,255,255; };
+		x = 0; y = 100;
+		text { 
+			caption = " "; } text2;
+		x = 0; y = 0;
+} askMe;
+
+# a picture for text input (getFilename)
+picture {
+	text { 
+		caption = "Enter version (e.g. vs123123):"; font_color=255,255,255; };
+		x = 0; y = 100;
+		text { 
+			caption = " "; } text3;
+		x = 0; y = 0;
+} askMe2;
+
+picture {background_color = 128,128,128;} et_calibration;
+
+# --------------- SDL definitions: TRIALS --------------- #
+
+# Log-trial
+trial {
+   picture askMe;
+} getOutput;
+
+trial {
+   picture askMe2;
+} getOutput2;
+
+# Experimental trial
+trial {
+	stimulus_event {
+		picture experimental_picture;
+		duration = 3000;
+	} experimental_event;
+} experimental_trial; 
+
+# Practice-trial
+trial {
+	stimulus_event {
+		picture experimental_picture;
+		duration = 3000;
+	} practice_event;
+} practice_trial; 
+
+# Evaluation trial: GO
+trial {
+	trial_duration = forever;
+	trial_type = specific_response;
+	terminator_button = 1,2,3;
+	
+	stimulus_event {
+		picture evaluation_text; 
+	} text_event;
+} evaluation_trial;
+
+# Evaluation trial: STOP
+trial {
+	trial_duration = 500;
+	
+	stimulus_event {
+		picture evaluation_text; 
+	} stop_event;
+} stop_trial;
+
+# End trial
+trial {
+	trial_duration = 5000; 
+	stimulus_event {
+		picture end_picture;
+		delta_time = 2000;
+	} end_event;
+} end_trial;
+

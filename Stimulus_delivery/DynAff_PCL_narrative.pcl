@@ -1,0 +1,140 @@
+# Array with picture names
+array <string> jpg_char[3] =
+{"char1.jpg",
+ "char2.jpg",
+ "char3.jpg"};
+
+# Array with picture names
+array <string> jpg_loc[3] =
+{"loc_red.jpg",
+ "loc_white.jpg",
+ "loc_blue.jpg"};
+
+# Array with isolation stimuli
+array <int> iso_stim[6] =
+	{10,11,12,20,21,22};
+iso_stim.shuffle();
+
+# Array with narrative stimuli
+array <int> nar_stim[48] =
+	{10,11,12,10,11,12,11,12,
+	 10,20,21,22,20,21,22,10,
+	 21,11,22,12,20,21,20,22,
+	 11,20,11,20,22,12,10,22,
+	 21,21,12,11,20,10,22,21,
+	 10,12,20,22,11,12,21,10};
+
+# Array with onset times for isolation stimuli
+array <int> iso_onset[36] = 
+{49750,
+88720,
+149730,
+176670,
+225890,
+262820,
+340770,
+388970,
+438460,
+493950,
+551960,
+601410,
+648720,
+691280,
+716410,
+753330,
+782560,
+820000,
+861030,
+913330,
+968720,
+1011280,
+1036920,
+1087180,
+1126150,
+1166740,
+1206440,
+1242050,
+1300000,
+1343080,
+1379490,
+1433850,
+1478970,
+1525640,
+1566150,
+1593850};
+
+# Array with onset times for narrative stimuli
+array <int> nar_onset[48] =
+{3900,
+4800,
+5500,
+21700,
+71280,
+117440,
+187880,
+218940,
+236740,
+253300,
+254200,
+254970,
+284600,
+304780,
+318620,
+327840,
+354590,
+400770,
+451100,
+475000,
+508000,
+540930,
+563630,
+582650,
+613190,
+621550,
+729870,
+766770,
+775480,
+803880,
+831040,
+855250,
+872300,
+907770,
+958970,
+980100,
+1054930,
+1098130,
+1119650,
+1138850,
+1161200,
+1180510,
+1190220,
+1230180,
+1266950,
+1312290,
+1329430,
+1395880};
+
+# Indices for "special" nar_stim, when succeeding stimuli should be juxtaposed
+array <int> nar_special[2] =
+	{1,10};
+	
+# Locations for special cases:
+array <int> loc_special[3] =
+	{-600, 0, 600};
+
+# --------------- PCL parameters ------------- #
+
+# Iterables
+int i_iso = 1; 
+int i_nar = 1;
+int i_spec = 1;
+
+# Stop-condition
+int stop = 0;
+
+# Declaration of other stuff
+int stimulus_category = 0;
+int actual_onset = 0;
+int start_pic = 0;
+string current = "";
+int go_iso;

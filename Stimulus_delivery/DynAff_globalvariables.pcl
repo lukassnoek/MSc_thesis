@@ -1,0 +1,6 @@
+# Some global variables to set in every scenario
+int trk_test = 1;
+int stim_dur = 3000;
+int delay = 2000; # before stim starts
+int ISI = 5000; # inter-stimulus interval
+

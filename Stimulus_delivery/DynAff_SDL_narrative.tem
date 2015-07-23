@@ -1,0 +1,196 @@
+# Introduction text (example)
+text {
+	caption = 
+
+	"Nu volgt de instructie over de taak voor dit blok. Druk steeds op
+	een van de knoppen onder je rechterhand om door te gaan.";
+	
+	font_size = 30; 
+} intro_part1;
+
+text {
+	caption = 
+	
+	"Luister goed naar het verhaal en kijk goed naar de afbeeldingen die 
+	op het scherm komen. De afbeeldingen kunnen op twee manieren voorkomen: \n";
+	
+	font_size = 30;
+} intro_part2;
+
+text {
+	caption = 
+	
+	"1. Tijdens het verhaal. Hier correspondeert de afbeelding met 
+	de persoon of locatie die op dat moment in het verhaal voorkomt.
+	Probeer zo snel mogelijk de afbeeldingen aan de karakters en locaties 
+	in het verhaal te koppelen en te onthouden! \n";
+
+	font_size = 30;
+} intro_part3;				
+
+text {
+	caption = 
+	
+	"2. Tussen passages in het verhaal. De afbeelding wordt getoond los van 
+	het verhaal. Welke stimulus wanneer voorkomt, is volledig willekeurig!\n";
+	
+	font_size = 30;
+} intro_part4;		
+		
+text {
+	caption = 
+	
+	"We gaan even testen hoe hard het volume moet staan;
+	 We starten straks een scan, en tegenlijkertijd zal je
+	 een audiofragment horen. Dit duurt 10 seconden. 
+	 Daarna zullen we je vragen of het volume goed was en
+	 zullen we beginnen met het echte verhaal.";
+	 font_size = 30;
+} audiotest_text;		
+
+# Introduction text2
+text {
+	caption = 
+
+	"Probeer je goed in te leven in het verhaal. \n
+				  
+	Ook is het belangrijk dat je zo min mogelijk beweegt,
+	je ogen openhoudt, en niet in slaap valt. \n \n
+				
+	Als je er klaar voor bent,
+   druk dan op een knop om te beginnen!"; 
+	
+	font_size = 30;
+	text_align = align_center;
+} introduction_nar2;
+
+# Narrative audio
+wavefile { filename = "Narrative_final_36_isi5.wav";} narrative_file;
+wavefile { filename = "audiotest.wav";} audiotest_file;
+
+# Experimental bitmap
+bitmap {	filename = "char1.jpg";} face1_bm;			# Janos
+bitmap {	filename = "char2.jpg";} face2_bm;			# Benji
+bitmap {	filename = "char3.jpg";} face3_bm;			# Matthias
+bitmap {	filename = "loc_red.jpg";} house1_bm;	# House Janos
+bitmap {	filename = "loc_white.jpg";} house2_bm; # House Benji 
+bitmap {	filename = "loc_blue.jpg";} house3_bm; # House Matthias
+
+# End
+text {
+			caption = 	"Dit is het einde van dit deel van het experiment."; 
+			font =		"arial";		
+			font_size = 25;
+} end;
+
+# Captions for special stimuli
+text { caption = "Janos"; font_size = 60;} jan_cap;
+text { caption = "Matthias"; font_size = 60;} mat_cap;
+text { caption = "Benji"; font_size = 60;} ben_cap;
+text { caption = "Kamer Janos"; font_size = 50;} locjan_cap;
+text { caption = "Kamer Matthias"; font_size = 50;} locmat_cap;
+text { caption = "Kamer Benji"; font_size = 50;} locben_cap;
+
+# --------------- SDL definitions: PICTURES/SOUNDS --------------- #
+
+# Intro
+picture {text intro_part1; x = 0; y = 300;} introduction_picture;
+picture {text introduction_nar2; x = 0; y = 0;} introduction_picture2;
+picture {text audiotest_text; x = 0; y = 0;} audiotest_pic;
+
+# Narrative
+sound { wavefile narrative_file;
+		  } narrative;
+
+sound { wavefile audiotest_file;
+		  } audiotest;
+
+# End
+picture {text end; x = 0; y = 0;} end_picture;
+
+# Pulse
+picture {text { caption = "We gaan bijna beginnen. \n Even wachten op de scanner..."; 	text_align = align_center;
+					 font="arial"; font_size = 20;}; 
+					 x=0; y=0;} pulsetrial;
+
+# Experimental trial
+picture {background_color = 0,0,0;} exp_pic;
+
+# Background
+picture {text { caption = "+"; font_size = 40; background_color = 0,0,0;}; x=0; y=0;} default;
+
+# a picture for text input (getFilename)
+picture {
+	text { 
+		caption = "Enter the output filename:"; font_color=255,255,255; };
+		x = 0; y = 100;
+		text { 
+			caption = " "; } text2;
+		x = 0; y = 0;
+} askMe;
+
+# a picture for text input (getFilename)
+picture {
+	text { 
+		caption = "Enter version (e.g. vs123123):"; font_color=255,255,255; };
+		x = 0; y = 100;
+		text { 
+			caption = " "; } text3;
+		x = 0; y = 0;
+} askMe2;
+
+picture {background_color = 128,128,128;} et_calibration;
+
+picture {text jan_cap; x = 0; y = 500;} jan_picture;
+picture {text mat_cap; x = 0; y = 500;} mat_picture;
+picture {text ben_cap; x = 0; y = 500;} ben_picture;
+picture {text locjan_cap; x = 0; y = 500;} locjan_picture;
+picture {text locmat_cap; x = 0; y = 500;} locmat_picture;
+picture {text locben_cap; x = 0; y = 500;} locben_picture;
+
+# --------------- SDL definitions: TRIALS --------------- #
+
+trial {
+   picture askMe;
+} getOutput;
+
+trial {
+   picture askMe2;
+} getOutput2;
+
+# Intro trial
+trial {
+	all_responses		= true; 
+	trial_type 			= first_response;
+	trial_duration 	= forever;
+		stimulus_event {
+			picture introduction_picture;
+			time = 0;
+		} introduction_event;
+} introduction_trial;
+
+# Intro trial
+trial {
+	all_responses		= true; 
+	trial_type 			= first_response;
+	trial_duration 	= forever;
+		stimulus_event {
+			picture introduction_picture2;
+			time = 0;
+		} introduction_event2;
+} introduction_trial2;
+
+# End trial
+trial {
+	trial_duration = 5000; 
+	stimulus_event {
+		picture end_picture;
+	} end_event;
+} end_trial;
+
+trial {
+	stimulus_event {
+		picture exp_pic;
+	} exp_event;
+} exp_trial;
+
