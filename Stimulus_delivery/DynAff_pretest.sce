@@ -36,15 +36,14 @@ begin;
 
 # --------------- SDL definitions: objects --------------- #
 
-TEMPLATE "DynAff_SDLtemplate_prepost.tem";
+TEMPLATE "DynAff_SDL_prepost.tem";
 
 # --------------- START OF PCL --------------- #
 begin_pcl;
 
 # Set trk_test in "global_variables.pcl"
-int trk_test;
-include "DynAff_eyetrackertesting.pcl";
-include "DynAff_PCLtemplate_prepost.pcl";
+include "DynAff_globalvariables.pcl";
+include "DynAff_PCL_prepost.pcl";
 
 output_file out = new output_file;
 out.open (filename + "_DynAff_pretest_" + version + ".txt");
@@ -66,28 +65,24 @@ include "DynAff_functions.pcl";
 
 # Suffix for .edf filename
 string filename_suffix = "a";
-include "DA_tracker_init.pcl"
+include "DynAff_tracker_init.pcl"
 
 # Regular execution of intro trial
-introduction_trial.present();
-introduction_trial2.present();
+introtrial1.present();
 
 # -------------- Practice-trial ------------- #
-exp_bitmap.set_filename("practice.jpg");
-exp_bitmap.load();
+#exp_bitmap.set_filename("practice.jpg");
+#exp_bitmap.load();
 
-int now = clock.time(); 
-wait_ISI(now, 2000);
+#int now = clock.time(); 
+#wait_ISI(now, 2000);
 
-practice_trial.present();
-exp_bitmap.unload();
+#practice_trial.present();
+#exp_bitmap.unload();
 
-now = clock.time(); 
-wait_ISI(now, 3000);
+#run_evaluation(0, 0, 1000, 1);
 
-run_evaluation(0, 0, 1000, 1);
-
-introduction_trial3.present();
+introtrial2.present();
 
 # --------------- WAIT FOR PULSE-trial ------------- #
 pulsetrial.present();
@@ -108,7 +103,7 @@ wait_ISI(timer, 5000);
 
 # --------------- MAIN EXPERIMENTAL LOOP ------------- #
 # Loops until all stimuli have been presented. 
-# In 50% of the trials (counterbalenced over conditions),
+# In 50% of the trials (counterbalanced over conditions),
 # an evaluation-trial is presented.
 
 loop int i = 1 until i > stimuli_condition.count() begin;
@@ -148,8 +143,8 @@ loop int i = 1 until i > stimuli_condition.count() begin;
 	# Present experimental trial!
 	exp_bitmap.load();
 	start_pic = clock.time();
-	experimental_event.set_event_code(string(stimulus_category));
-	tracker.send_message(string(stimulus_category));
+	experimental_event.set_event_code(string(stimulus_category+go_eval*100));
+	tracker.send_message(string(stimulus_category+go_eval*100));
    
 	experimental_trial.present();
 	

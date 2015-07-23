@@ -110,7 +110,7 @@ def create_scaninfo(par_filepath):
     scaninfo = nib.parrec.parse_PAR_header(fID)[0]
     fID.close()
     
-    to_save = os.path.join(os.getcwd(), + par_filepath[:-4] + '_scaninfo' + '.cPickle')
+    to_save = os.path.join(os.getcwd(), par_filepath[:-4] + '_scaninfo' + '.cPickle')
     
     with open(to_save,'wb') as handle:
             cPickle.dump(scaninfo, handle)
@@ -176,24 +176,25 @@ def setup_analysis_skeleton(project_dir,sub_stem):
     subjectDir = []
 
     for idx, subs in enumerate(subjects):
-    
-        subjectDir.append(subs[0:len(subject_stem) + 3])
+        
+        sub_dir = os.path.join(TP_dir, subs[0:(len(sub_stem) + 4)])
+        subjectDir.append(sub_dir)
     
         if os.path.exists(subjectDir[idx]) == 0:
-            os.mkdir(subjectDir[idx])
+            os.mkdir(os.path.join(TP_dir,subjectDir[idx]))
     
-        toMove = glob.glob(subs[0:len(subject_stem) + 3] + '*')
+        toMove = [os.path.abspath(f) for f in glob.glob(subjectDir[idx] + '*')]
     
         # Move all files to subject-specific dirs
         for mFile in toMove:
             if os.path.isfile(mFile):
                 shutil.move(mFile, subjectDir[idx])
             
-            for entry in glob.glob('*'):
-                if os.path.isfile(entry):
-                    print "Not allocated: " + entry
-                    
-    subject_dir_list = [os.getcwd() + '/' + sDir for sDir in subjectDir]
+        for entry in glob.glob(subjectDir[idx] + '*'):
+            if os.path.isfile(entry):
+                print "Not allocated: " + entry
+    
+    return subjectDir
     
 def reset_pipeline(project_dir, except_nifti = 1):
     """
@@ -241,58 +242,33 @@ def reset_pipeline(project_dir, except_nifti = 1):
 
         print "Pipeline has been reset!"
         
-def movefiles_subjectdirs(subject_stem, ToProcess):
+def movefiles_subjectdirs(sub_dirs, ToProcess):
     """
     Moves files to subject specific directories and creates run-specific
     subdirectories
     """
     
-    os.chdir(ToProcess)
-    allFiles = glob.glob(subject_stem + '*')
-    prefixes = [pref[0:7] for pref in allFiles]
-    subjects = list(set(prefixes))
-    subjectDir = []
-
-    for idx, subs in enumerate(subjects):
-    
-        subjectDir.append(subs[0:len(subject_stem) + 3])
-    
-        if os.path.exists(subjectDir[idx]) == 0:
-            os.mkdir(subjectDir[idx])
-    
-        toMove = glob.glob(subs[0:len(subject_stem) + 3] + '*')
-    
-        # Move all files to subject-specific dirs
-        for mFile in toMove:
-            if os.path.isfile(mFile):
-                shutil.move(mFile, subjectDir[idx])
-            
-            for entry in glob.glob('*'):
-                if os.path.isfile(entry):
-                    print "Not allocated: " + entry
-                    
-    subject_dir_list = [os.getcwd() + '/' + sDir for sDir in subjectDir]
     
     # Create subdirectories
-    for subjectDir in subject_dir_list:
+    for subjectDir in sub_dirs:
         os.chdir(subjectDir)
     
         mri_files = glob.glob('*.nii.gz')
-        subdir_names = []
+        mri_dir_names = []
         
         for mriFile in mri_files:
             split_file = mriFile.split('_')
             from_idx = split_file.index('WIP')
             to_idx = split_file.index('SENSE')
             toAppend = "_".join(split_file[from_idx+1:to_idx])            
-            subdir_names.append(toAppend)
+            mri_dir_names.append(toAppend)
             
             os.mkdir(toAppend)
             shutil.move(mriFile, toAppend)
         
         print "Created the following subdirs for {0}: ".format(os.path.basename(subjectDir))
-        for subdir in subdir_names:
-            print subdir
+        for d in mri_dir_names:
+            print d
         print "\n"
         
 def get_filepaths(keyword, directory):

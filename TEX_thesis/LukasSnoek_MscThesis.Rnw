@@ -47,6 +47,7 @@ options(scipen = 1, digits = 2)
 
 %%%%%%%%%%%%%%%%%%%% Begin doc! %%%%%%%%%%%%%%%%%%%%
 \begin{document}
+\SweaveOpts{concordance=TRUE}
 
 %%%%%%%%%%%%%%%%%%%% Titlepage! %%%%%%%%%%%%%%%%%%%%
 

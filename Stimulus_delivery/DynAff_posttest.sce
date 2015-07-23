@@ -41,15 +41,14 @@ begin;
 
 # --------------- SDL definitions: PICTURES --------------- #
 
-TEMPLATE "DynAff_SDLtemplate_prepost.tem";
+TEMPLATE "DynAff_SDL_prepost.tem";
 
 # --------------- START OF PCL --------------- #
 begin_pcl;
 
 # Set trk_test in "global_variables.pcl"
-int trk_test;
-include "DynAff_eyetrackertesting.pcl";
-include "DynAff_PCLtemplate_prepost.pcl";
+include "DynAff_globalvariables.pcl";
+include "DynAff_PCL_prepost.pcl";
 
 output_file out = new output_file;
 out.open (filename + "_DynAff_posttest_" + version + ".txt");
@@ -71,11 +70,11 @@ include "DynAff_functions.pcl";
 
 # Suffix for .edf filename
 string filename_suffix = "p";
-include "DA_tracker_init.pcl"
+include "DynAff_tracker_init.pcl"
 
 # --------------- Logfile stuff --------------- #
-
-introduction_trialpost.present();
+introtrial1.present();
+introtrial2.present();
 
 # --------------- WAIT FOR PULSE-trial ------------- #
 pulsetrial.present();
@@ -136,8 +135,8 @@ loop int i = 1 until i > stimuli_condition.count() begin;
 	# Present experimental trial!
 	exp_bitmap.load();
 	start_pic = clock.time();
-	experimental_event.set_event_code(string(stimulus_category));
-	tracker.send_message(string(stimulus_category));
+	experimental_event.set_event_code(string(stimulus_category+go_eval*100));
+	tracker.send_message(string(stimulus_category+go_eval*100));
    
 	experimental_trial.present();
 	

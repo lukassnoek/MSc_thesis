@@ -31,15 +31,14 @@ begin;
 
 # --------------- SDL definitions: objects --------------- #
 
-TEMPLATE "DynAff_SDLtemplate_prepost.tem";
+TEMPLATE "DynAff_SDL_prepost.tem";
 
 # --------------- START OF PCL --------------- #
 begin_pcl;
 
 # Set trk_test in "global_variables.pcl"
-int trk_test;
-include "DynAff_eyetrackertesting.pcl";
-include "DynAff_PCLtemplate_prepost.pcl";
+include "DynAff_globalvariables.pcl";
+include "DynAff_PCL_prepost.pcl";
 
 output_file out = new output_file;
 out.open (filename + "_DynAff_stimulusdriven_" + version + ".txt");
@@ -61,7 +60,7 @@ include "DynAff_functions.pcl";
 
 # Suffix for .edf filename
 string filename_suffix = "s";
-include "DA_tracker_init.pcl"
+include "DynAff_tracker_init.pcl"
 
 # --------------- (STIMULI) ARRAYS ----------- #
 
@@ -91,7 +90,8 @@ array <int> stim_idx[48] =
 	 41,42,43,44,45,46,47,48};
 stim_idx.shuffle();
 
-introduction_trialstimdriv.present();
+introtrial1.present();
+introtrial2.present();
 
 # --------------- WAIT FOR PULSE-trial ------------- #
 pulsetrial.present();

@@ -18,20 +18,20 @@ sub run_evaluation(int confirm, int int_pos, int toMove, int j) begin;
 		end;
 		
 		if response_manager.last_response() == 1  then
-			toMove = int_pos - 250;
+			toMove = int_pos - 150;
 			
 			if toMove < - 750 then toMove = -750; end;
 	
-			evaluation_text.remove_part(11);
+			evaluation_text.remove_part(15);
 			evaluation_text.add_part(choice_box,toMove,0);
 			evaluation_trial.present();
 		
 		elseif response_manager.last_response() == 3 then
-			toMove = int_pos + 250;
+			toMove = int_pos + 150;
 		
 			if toMove > 750 then toMove = 750; end;
 	
-			evaluation_text.remove_part(11);
+			evaluation_text.remove_part(15);
 			evaluation_text.add_part(choice_box,toMove,0);
 			evaluation_trial.present();
 		
@@ -39,11 +39,11 @@ sub run_evaluation(int confirm, int int_pos, int toMove, int j) begin;
 			start_pic = clock.time();
 			
 			if toMove == 1000 then
-				out.print(string((int_pos+1000)/250));
-				stop_event.set_event_code(string((int_pos+1000)/250));
+				out.print(string(int_pos/150));
+				stop_event.set_event_code(string(int_pos/150));
 			else
-				out.print(string((toMove+1000)/250));
-				stop_event.set_event_code(string((toMove+1000)/250));
+				out.print(string(toMove/150));
+				stop_event.set_event_code(string(toMove/150));
 			end;
 				
 			out.print("\n");
@@ -52,7 +52,7 @@ sub run_evaluation(int confirm, int int_pos, int toMove, int j) begin;
 			confirm = 1;
 		
 			stop_trial.present();
-			evaluation_text.remove_part(11);
+			evaluation_text.remove_part(15);
 			ISI_picture.present();
 			loop until clock.time() > (start_pic+2000) begin end;
 		end;

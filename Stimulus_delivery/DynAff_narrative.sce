@@ -45,98 +45,16 @@ begin;
 
 # --------------- SDL definitions: objects --------------- #
 
-TEMPLATE "DynAff_SDLtemplate_narrative.tem";
+TEMPLATE "DynAff_SDL_narrative.tem";
 
 #--------------- BEGIN PCL --------------------#
 
 begin_pcl; 
 
 # Set trk_test in "global_variables.pcl"
-int trk_test;
-include "DynAff_eyetrackertesting.pcl";
+include "DynAff_globalvariables.pcl";
 
-# --------------- EYETRACKING STUFF ---------- #
-# Some parameter for the eyetracker.
-
-# Suffix for .edf filename
-string filename_suffix = "n";
-include "DA_tracker_init.pcl"
-
-# --------------- (STIMULI) ARRAYS ----------- #
-
-# Array with picture names
-array <string> jpg_char[3] =
-{"char1.jpg",
- "char2.jpg",
- "char3.jpg"};
-
-# Array with picture names
-array <string> jpg_loc[3] =
-{"loc_janos.jpg",
- "loc_matthias.jpg",
- "loc_benji.jpg"};
-
-# Array with isolation stimuli
-array <int> iso_stim[6] =
-	{10,11,12,20,21,22};
-iso_stim.shuffle();
-
-# Array with narrative stimuli
-array <int> nar_stim[48] =
-	{10,11,12,10,11,12,11,12,
-	 10,20,21,22,20,21,22,10,
-	 21,11,22,12,20,21,20,22,
-	 11,20,11,20,22,12,10,22,
-	 21,21,12,11,20,10,22,21,
-	 10,12,20,22,11,12,21,10};
-
-# Array with onset times for isolation stimuli
-array <int> iso_onset[36] = 
-{49750,85650,143590,167900,213800,
-247700,322560,367700,414080,466900,
-521270,567400,611280,650770,672820,
-706670,732820,767180,805130,854350,
-906660,946150,968720,1015900,1051790,
-1092310,1125130,1157440,1212310,1252310,
-1288210,1336920,1378970,1422560,1460000,
-1484620};
-
-# Array with onset times for narrative stimuli
-array <int> nar_onset[48] =
-{3900,4800,5500,21700,68300,111400,175900,206660,
-221500,237950,238920,239500,266540,287180,300000,309000,
-333130,376290,423500,448000,477160,509400,529550,548800,
-576350,584610,682560,717000,725641,751092,774871,796923,
-813023,848734,897109,914850,983697,1023590,1045228,1061500,
-1083589,1100000,1108703,1144876,1179000,1221538,1238301,1298846};
-
-# Indices for "special" nar_stim, when succeeding stimuli should be juxtaposed
-array <int> nar_special[2] =
-	{1,10};
-	
-# Locations for special cases:
-array <int> loc_special[3] =
-	{-500, 0, 500};
-
-# --------------- PCL parameters ------------- #
-int delay = 1000; # before stim starts
-int stim_dur = 2000; # stimulus duration
-int ISI = 4000; # inter-stimulus interval
-
-# Iterables
-int i_iso = 1; 
-int i_nar = 1;
-int i_spec = 1;
-
-# Stop-condition
-int stop = 0;
-
-# Declaration of other stuff
-int stimulus_category = 0;
-int actual_onset = 0;
-int start_pic = 0;
-string current = "";
-int go_iso;
+include "DynAff_PCL_narrative.pcl";
 
 # --------------- LOGFILE stuff -------------- #
 getOutput.present();
@@ -155,7 +73,7 @@ out.print("T_abs");			out.print("\t");
 out.print("T_rel");			out.print("\n");
 	
 out.print("Start");			out.print("\t");
-out.print(string(0));		out.print("\t");
+out.print(string(100));		out.print("\t");
 
 # Get indices for stimulus locations
 int idx_char_jan = int(version.substring(3,1)); 
@@ -178,6 +96,13 @@ string logname = logfile.filename();
 string new_name = logname.replace(".log","") + "_" + version + ".log";
 logfile.set_filename(new_name);
 
+# --------------- EYETRACKING STUFF ---------- #
+# Some parameter for the eyetracker.
+
+# Suffix for .edf filename
+string filename_suffix = "n";
+include "DynAff_tracker_init.pcl"
+
 # Start off with introduction trial
 introduction_trial.present();
 introduction_picture.add_part(intro_part2, 0, 150);
@@ -187,11 +112,20 @@ introduction_trial.present();
 introduction_picture.add_part(intro_part4, 0, -150);
 introduction_trial.present();
 
+audiotest_pic.present();
+int current_pulse = pulse_manager.main_pulse_count();	
+loop until ( pulse_manager.main_pulse_count() > current_pulse ) begin end;
+
+audiotest.present();
+
+int now = clock.time();
+loop until clock.time() > (now+10000) begin end; 
+
 introduction_trial2.present();
 
 # Wait for scanner (until pulse = 2)
 pulsetrial.present();
-int current_pulse = pulse_manager.main_pulse_count();	
+current_pulse = pulse_manager.main_pulse_count();	
 loop until ( pulse_manager.main_pulse_count() > current_pulse ) begin end;
 
 int timer = clock.time();
@@ -201,7 +135,8 @@ default.present();
 narrative.present();
 
 # Print onset of narrative to logfile
-out.print(string(timer));	out.print("\n");
+out.print(string(timer));			out.print("\t");
+out.print(string(timer-timer));	out.print("\n");
 
 # While loop until all stimuli have passed
 loop until stop == 1 begin;
@@ -227,20 +162,31 @@ loop until stop == 1 begin;
 			# Add appropriate stimulus according to stimulus_category
 			if (stimulus_category == 10) then 
 				exp_pic.add_part(face1_bm, loc_special[it], 0);
-				exp_pic.add_part(jan_cap, loc_special[it], 500);
+				exp_pic.add_part(jan_cap, loc_special[it], 450);
 				
 			elseif (stimulus_category == 11) then 
 				exp_pic.add_part(face2_bm, loc_special[it], 0);
-				exp_pic.add_part(jan_cap, loc_special[it], 500);
+				exp_pic.add_part(mat_cap, loc_special[it], 450);
 
-				elseif (stimulus_category == 12) then exp_pic.add_part(face3_bm, loc_special[it], 0);
-				elseif (stimulus_category == 20) then exp_pic.add_part(house1_bm, loc_special[it], 0);	
-				elseif (stimulus_category == 21) then exp_pic.add_part(house2_bm, loc_special[it], 0);
-				elseif (stimulus_category == 22) then exp_pic.add_part(house3_bm, loc_special[it], 0);	
+			elseif (stimulus_category == 12) then 
+				exp_pic.add_part(face3_bm, loc_special[it], 0);
+				exp_pic.add_part(ben_cap, loc_special[it], 450);
+
+			elseif (stimulus_category == 20) then 
+				exp_pic.add_part(house1_bm, loc_special[it], 0);	
+				exp_pic.add_part(locjan_cap, loc_special[it], 450);
+
+			elseif (stimulus_category == 21) then 
+				exp_pic.add_part(house2_bm, loc_special[it], 0);
+				exp_pic.add_part(locmat_cap, loc_special[it], 450);
+
+			elseif (stimulus_category == 22) then 
+				exp_pic.add_part(house3_bm, loc_special[it], 0);	
+				exp_pic.add_part(locben_cap, loc_special[it], 450);
+
 			end;
 			
 			# Set to the right location
-			#exp_pic.set_part_x(it+it, loc_special[it]);
 			exp_event.set_event_code(string(stimulus_category+1000));
 			
 			# Wait until next presentation
@@ -257,7 +203,7 @@ loop until stop == 1 begin;
 				actual_onset = nar_onset[i_nar+1];
 			else
 				int stop_now = clock.time();
-				loop until (clock.time() > stop_now + 3000) begin end;
+				loop until (clock.time() > stop_now + ISI) begin end;
 			end;
 			
 			i_nar = i_nar + 1;
@@ -327,7 +273,7 @@ loop until stop == 1 begin;
 	
 	# Show default screen until onset
 	if current == "iso" then
-		actual_onset = actual_onset + 1000;
+		actual_onset = actual_onset + delay;
 	elseif current == "nar" then
 		stimulus_category = stimulus_category + 100; # to disentangle from iso_stim
 	end;
