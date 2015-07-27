@@ -120,11 +120,11 @@ loop until j > stim_idx.count() begin;
 	# Prepare stim
 	exp_bitmap.set_filename(stim_names[stim_idx[j]]);
 	exp_bitmap.load();
-	experimental_event.set_event_code(string(stim_codes[stim_idx[j]]));
+	experimental_event.set_event_code(string(stim_codes[stim_idx[j]]+go_eval*1000000));
 	
 	# Start trial; set codes
 	start_pic = clock.time();
-	tracker.send_message(string(stim_codes[stim_idx[j]]));
+	tracker.send_message(string(stim_codes[stim_idx[j]]+go_eval*1000000));
    
 	experimental_trial.present();
 	

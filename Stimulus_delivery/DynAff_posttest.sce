@@ -20,7 +20,7 @@ scenario_type = fMRI;
 #scenario_type = fMRI_emulation;
 #scan_period = 2000;
 pulses_per_scan = 1000;
-pulse_code = 30;
+pulse_code = 100;
 
 default_text_color = 255,255,255;	
 default_background_color = 0,0,0;
