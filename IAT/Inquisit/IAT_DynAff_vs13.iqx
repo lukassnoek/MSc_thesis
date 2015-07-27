@@ -244,7 +244,7 @@ expressions.d:						overall d-score
 / percentcorrect:      				 calculates the overall percent correct score of initial responses of test trials of D-score qualifying latencies
 
 <data>
-/file = "pictureiat_rawdata.iqdat"
+/file = ""DynAff_IAT.iqdat".iqdat"
 / columns = [date, time, group, subject, blockcode, blocknum, trialcode, trialnum, response, correct, latency, 
 					stimulusnumber, stimulusitem, expressions.da, expressions.db, expressions.d, expressions.percentcorrect ]
 /separatefiles = true
@@ -266,7 +266,7 @@ expressions.d:						overall d-score
 / percentcorrect:      				 calculates the overall percent correct score of initial responses of test trials of D-score qualifying latencies
 
 <summarydata >
-/file = "pictureiat_summary.iqdat"
+/file = "DynAff_IAT.iqdat"
 / columns = [script.startdate, script.starttime, script.subjectid, script.groupid, script.elapsedtime, values.completed,
 expressions.da, expressions.db, expressions.d, expressions.percentcorrect]
 </summarydata>
@@ -318,21 +318,21 @@ Task instruction stimuli
 </text>
 
 <item instructions>
-/ 1 = "Zet je middel- of wijsvingers op de E en I toetsen van het toetsenbord. Je krijg afbeeldingen en woorden uit verschillende categorieën te zien krijgen. Deze categorieën staan telkens links- en rechtsboven in het scherm. De afbeeldingen/woorden zullen een-voor-een op het midden van het scherm komen. Wanneer een item behoort tot de categorie aan de linkerkant, druk dan de E toets; als een item hoort bij de rechter categorie, druk dan op de I toets. De afbeeldingen/woorden horen altijd maar tot 1 categorie. Als je een fout maakt, zal er een X verschijnen - fix dan de fout door op de andere knop te drukken.
+/ 1 = "Zet je middel- of wijsvingers op de E en I toetsen van het toetsenbord. Je zal afbeeldingen en woorden uit verschillende categorieën te zien krijgen. Deze categorieën staan telkens links- en rechtsboven in het scherm. De afbeeldingen/woorden zullen een-voor-een op het midden van het scherm komen. Wanneer een item hoort bij de categorie aan de linkerkant, druk dan de E toets; als een item hoort bij de rechter categorie, druk dan op de I toets. De afbeeldingen/woorden horen altijd maar tot 1 categorie. Als je een fout maakt, zal er een X verschijnen - fix dan de fout door op de andere knop te drukken.
 
-We houden je reactiesnelheid tijdens dit taakje in de gaten. BESLIS ZO SNEL MOGELIJK terwijl je probeert ZO WEINIG mogelijk fouten te maken. Als je te te langzaam of teveel fouten maakt, is je data oninterpretabel. Deze taak duurt ongeveer 5 minuten. om af te maken"
+We meten je reactiesnelheid tijdens dit taakje. BESLIS ZO SNEL MOGELIJK terwijl je probeert ZO WEINIG mogelijk fouten te maken. Als je te te langzaam of teveel fouten maakt, is je data onbruikbaar. Deze taak duurt ongeveer 5 minuten."
 
 / 2 = "Zoals je aan de bovenkant van het scherm ziet, zijn de categorieën veranderd; de items om te categoriseren zijn ook veranderd. Maar: de regels zijn wel gewoon hetzelfde.
 
-Wanneer een item hoort tot de linker categorie, druk op de E toets; wanneer het item hoort bij de rechter categorie, druk op de I toets. De items horen altijd maar tot 1 categorie. BESLIS ZO SNEL MOGELIJK."
+Wanneer een item hoort bij de linker categorie, druk op de E toets; wanneer het item hoort bij de rechter categorie, druk op de I toets. De items horen altijd maar tot 1 categorie. BESLIS ZO SNEL MOGELIJK."
 
 / 3 = "Zoals je nu kan zien, komen de vier categorieën die je eerder apart hebt gezien nu samen voor. Onthoud: elk item hoort maar tot een categorie. Als, bijvoorbeeld, de categorieën <%item.targetalabel.item(1)%> en <%item.attributealabel.item(1)%> voorkomen aan aparte kanten bovenaan het scherm, dan zullen afbeeldingen en woorden die <%item.targetalabel.item(1)%> representeren, gecategoriseerd moeten als <%item.targetalabel.item(1)%>, en NIET ALS <%item.attributealabel.item(1)%>.
 
-De groene en witte labels en items kunnen helpen om de juiste categorie te kiezen. Gebruik de E en I toetsen om de items te categoriseren in de vier groepen aan de linker- en rechterkant. Als je een fout maakt, druk op de andere toets om je fout te verbeteren."
+De groene labels (woorden) en witte labels (Janos/Matthias) kunnen helpen om de juiste categorie te kiezen. Gebruik de E en I toetsen om de items te categoriseren in de vier groepen aan de linker- en rechterkant. Als je een fout maakt, druk op de andere toets om je fout te verbeteren."
 
 / 4 = "Sorteer dezelfde vier categorieën opnieuw. Onthoud: beslis zo snel mogelijk terwijl je min mogelijk fouten probeert te maken.
 
-De groene en witte labels en items kunnen helpen om de juiste categorie te kiezen. Gebruik de E en I toetsen om de items te categoriseren in de vier groepen aan de linker- en rechterkant. Als je een fout maakt, druk op de andere toets om je fout te verbeteren."
+De groene labels (woorden) en witte labels (Janos/Matthias) kunnen helpen om de juiste categorie te kiezen. Gebruik de E en I toetsen om de items te categoriseren in de vier groepen aan de linker- en rechterkant. Als je een fout maakt, druk op de andere toets om je fout te verbeteren."
 
 / 5 = "Zoals je kan zien, zijn er maar twee categorieën, die van plek zijn gewisseled. Het concept dat eerder LINKS stond, staat nu RECHTS (en andersom). Je kan dit even oefenen.
 
@@ -340,11 +340,11 @@ Gebruik de E en I toetsen om de items links en rechts te categoriseren."
 
 / 6 = "Zoals je kan zien, zijn de vier categorieën in een nieuwe samenstelling te zien. Onthoud: elk item hoort maar tot één groep!
 
-De groene en witte labels en items kunnen helpen om de juiste categorie te kiezen. Gebruik de E en I toetsen om de items te categoriseren in de vier groepen aan de linker- en rechterkant. Als je een fout maakt, druk op de andere toets om je fout te verbeteren."
+De groene labels (woorden) en witte labels (Janos/Matthias) kunnen helpen om de juiste categorie te kiezen. Gebruik de E en I toetsen om de items te categoriseren in de vier groepen aan de linker- en rechterkant. Als je een fout maakt, druk op de andere toets om je fout te verbeteren."
 
 / 7 = "Sorteer de vier categorieën opnieuw. Onthoud: beslis zo snel mogelijk terwijl je min mogelijk fouten probeert te maken.
 
-De groene en witte labels en items kunnen helpen om de juiste categorie te kiezen. Gebruik de E en I toetsen om de items te categoriseren in de vier groepen aan de linker- en rechterkant. Als je een fout maakt, druk op de andere toets om je fout te verbeteren."
+De groene labels (woorden) en witte labels (Janos/Matthias) kunnen helpen om de juiste categorie te kiezen. Gebruik de E en I toetsen om de items te categoriseren in de vier groepen aan de linker- en rechterkant. Als je een fout maakt, druk op de andere toets om je fout te verbeteren."
 
 </item>
 
