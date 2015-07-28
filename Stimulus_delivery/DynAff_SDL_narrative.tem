@@ -66,7 +66,7 @@ text {
 
 # Narrative audio
 wavefile { filename = "Narrative_final_36_isi5.wav";} narrative_file;
-wavefile { filename = "audiotest.wav";} audiotest_file;
+wavefile { filename = "volume_check.wav";} audiotest_file;
 
 # Experimental bitmap
 bitmap {	filename = "char1.jpg";} face1_bm;			# Janos
