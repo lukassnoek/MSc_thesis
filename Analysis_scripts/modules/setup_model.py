@@ -4,6 +4,11 @@ Module with functions to create .bfsl files from Presentation-logfiles
 and consequently set up a FEAT first level model
 """
 
+# TO DO: 
+# FIX PULSECODE (not assuming only one code)
+# UNIVARIATE OPTION (for generate_FEAT_info)
+# univariate regressor in single-trial design
+
 # --------------------------- IMPORTS --------------------------- #
 import numpy as np
 import os
@@ -13,21 +18,26 @@ import glob
 home_dir = '/home/c6386806/Desktop/DynamicAffect/ToProcess'
 # --------------------------- SET UP --------------------------- #
 
+# Idea: built in a way to generate a 'univariate' regressor (ignore)
+con_names = ['Poschar','Negchar','Neuchar',
+             'Posloc','Negloc','Neuloc',
+             'Eval']
+'''
+con_codes = [[10],[11],[12],
+             [20],[21],[22],
+            [101,200]]
+'''            
 
-#con_names = ['Poschar','Negchar','Neuchar',
-#             'Posloc','Negloc','Neuloc',
-#             'Eval']
-
-#con_codes = [[10],[11],[12],
-#             [20],[21],[22],
-#             [101,200]]
-
+con_codes = [[10],[11],[12],
+             [20],[21],[22],
+            [101,200]]
+'''
 con_names = ['sit_pos','sit_neg','sit_neu',
              'fac_pos','fac_neg','fac_neu']
 
 con_codes = [[11000],[21000],[31000],
              [12100,12200],[22100,22200],[32100,32200]]
-
+'''
 con_info = zip(con_names, con_codes)
 
 #log_path = '/media/lukas/Data/DynamicAffect/da01_preproc/20150721-0003-pretest/da01-DynAff_pretest_vs123123.log'
@@ -61,6 +71,8 @@ def generate_bfsl(log_path, con_info, design, pulsecode = 100):
 
     # pulse_t = absolute time of first pulse
     pulse_t = df['Time'][df['Code'] == pulsecode]
+    df['Time'] = (df['Time']-float(pulse_t)) / 10000.0
+    df['Duration'] = df['Duration'] / 10000.0
 
     n_con = []
     bfsl_paths = []
@@ -76,8 +88,8 @@ def generate_bfsl(log_path, con_info, design, pulsecode = 100):
             idx = df['Code'] == code
 
         # Generate dataframe with time, duration, and weight given idx
-        to_write['Time'] = (df['Time'][idx]-float(pulse_t))/10000.0
-        to_write['Duration'] = df['Duration'][idx] / 10000.0
+        to_write['Time'] = df['Time'][idx]
+        to_write['Duration'] = df['Duration'][idx]
         to_write['Weight'] = np.ones((sum(idx),1))
 
         # Write to txt-file
@@ -106,7 +118,23 @@ def generate_bfsl(log_path, con_info, design, pulsecode = 100):
         n_ev = len(n_con)
     elif design == 'singletrial':
         n_ev = sum(n_con)
+    '''
+    iso_stimtimes = np.array(df['Time'][df['Code'] < 101])
 
+    audio_onset = iso_stimtimes[1:] + 10
+    audio_onset = np.append(0.0, audio_onset)
+    audio_onset = np.delete(audio_onset,-1)
+
+    audio_dur = np.append(iso_stimtimes[1],np.diff(iso_stimtimes[1:]) - 10)
+
+    to_write = pd.DataFrame()
+    to_write['Time'] = audio_onset
+    to_write['Duration'] = audio_dur
+    to_write['Weight'] = np.ones(len(audio_onset))
+
+    path_bfsl = '%s/%s.bfsl' % (base_dir,'narrative_audio')
+    to_write.to_csv(path_bfsl, sep = '\t', header = False, index = False)
+    '''
     generate_FEAT_info(base_dir,n_ev,con_names,n_con, bfsl_paths)
 
 # --------------------------- bfsl2fsf --------------------------- #
@@ -123,10 +151,14 @@ def generate_FEAT_info(directory, n_ev, con_names, n_con, bfsl_paths):
 
     out = open(os.path.join(directory, 'FEAT_EV_info.txt'), 'w')
 
-    out.write('set fmri(evs_orig): %i' % ()
-    'fmri(evs_real)': 48,
-    'fmri(ncon_orig)': 48,
-    'fmri(ncon_real)': 48,
+    out.write('set fmri(evs_orig): %i' % (np.sum(n_con)))
+    out.write('\n')
+    out.write('fmri(evs_real): %i' % (np.sum(n_con)))
+    out.write('\n')    
+    out.write('fmri(ncon_orig): %i' % (np.sum(n_con)))
+    out.write('\n')      
+    out.write('fmri(ncon_real): %i' % (np.sum(n_con)))
+    out.write('\n')
 
     c_ev = 1
     for c in xrange(len(n_con)):
@@ -188,19 +220,18 @@ import numpy as np
 import cPickle as cp
 
 
-feat_params = {
-    'fmri(outputdir)': '"%s"', ('/home/c6386806/Desktop/DynamicAffect/da01_FL/stimdriv')
-    'fmri(TR)': 2,
-    'fmri(npts)': 218,
-    'fmri(mc)': 1,
-    'fmri(temphp_yn)': 1,
-    'fmri(templp_yn)': 0,
-    'fmri(smooth)': 5,
-    'fmri(prewhiten_yn)': 1,
-    'fmri(thres)': 1,
-    'fmri(regstandard)': '"/usr/share/fsl/data/standard/MNI152_T1_2mm_brain"',
-    'feat_files(1)': '"/media/lukas/Data/DynamicAffect/da01_preproc/20150721-0006-posttest/da01-20150721-0006-posttest"',
-    'highres_files(1)': '"/media/lukas/Data/DynamicAffect/da01_preproc/20150721-0007-T1/da01-20150721-0007-T1_brain"'}
+feat_params = {'fmri(outputdir)': '"%s"', ('/home/c6386806/Desktop/DynamicAffect/da01_FL/stimdriv')
+'fmri(TR)': 2,
+'fmri(npts)': 218,
+'fmri(mc)': 1,
+'fmri(temphp_yn)': 1,
+'fmri(templp_yn)': 0,
+'fmri(smooth)': 5,
+'fmri(prewhiten_yn)': 1,
+'fmri(thres)': 1,
+'fmri(regstandard)': '"/usr/share/fsl/data/standard/MNI152_T1_2mm_brain"',
+'feat_files(1)': '"/media/lukas/Data/DynamicAffect/da01_preproc/20150721-0006-posttest/da01-20150721-0006-posttest"',
+'highres_files(1)': '"/media/lukas/Data/DynamicAffect/da01_preproc/20150721-0007-T1/da01-20150721-0007-T1_brain"'}
 
 fsf_template = '/media/lukas/Data/DynamicAffect/generic_template.fsf'
 fsf_info = '/media/lukas/Data/DynamicAffect/da01_preproc/20150721-0006-posttest/FEAT_EV_info.txt'
