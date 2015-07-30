@@ -14,13 +14,13 @@ from sklearn import svm
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
 
-def draw_random_subsample(mvpa, n_train):
+def draw_random_subsample(mvpa, n_test):
     ''' Draws random subsample of test trials for each class '''
     test_ind = np.zeros(len(mvpa.num_labels), dtype=np.int)
     
     for c in xrange(mvpa.n_class):
-        ind = np.random.choice(mvpa.class_idx[c], n_train, replace=False)            
-        test_ind[ind-1] = 1
+        ind = np.random.choice(mvpa.class_idx[c], n_test, replace=False)            
+        test_ind[ind] = 1
         
     return test_ind.astype(bool)
     
@@ -49,11 +49,9 @@ def select_voxels(mvpa, train_idx, threshold):
     
     diff_vec = np.mean(diff_patterns, axis = 0)
     
-    if np.sum(feat_idx) == 0:
-                 raise ValueError('Z-threshold too high! No voxels selected ' \
-                 + 'at iteration ' + str(i) + ' for ' + sub_dir)
-            
-    return(diff_vec > threshold)
+    feat_idx = diff_vec > threshold
+    
+    return(feat_idx)
    
 def mvpa_classify(iterations, n_test, zval):
     
@@ -62,6 +60,8 @@ def mvpa_classify(iterations, n_test, zval):
    
     # We need to load the first sub to extract some info
     mvpa = cPickle.load(open(subject_dirs[0]))
+    mvpa.data[np.isnan(mvpa.data)] = 0
+    
     #trials_selected = np.zeros((n_sub, mvpa.n_trials))     
     trials_predicted = np.zeros((n_sub, mvpa.n_trials, mvpa.n_class))
     
@@ -76,37 +76,47 @@ def mvpa_classify(iterations, n_test, zval):
         if sub_dir is not subject_dirs[0]:
             mvpa = cPickle.load(open(sub_dir))
     
+        score = []
         for i in xrange(iterations):
             test_idx = draw_random_subsample(mvpa, n_test)
             train_idx = np.invert(test_idx)
             feat_idx = select_voxels(mvpa,train_idx,zval)
             
+            
+            if np.sum(feat_idx) == 0:
+                 raise ValueError('Z-threshold too high! No voxels selected ' \
+                 + 'at iteration ' + str(i) + ' for ' + mvpa.subject_name)
+            
             train_data = mvpa.data[train_idx,:][:,feat_idx]
             test_data = mvpa.data[test_idx,:][:,feat_idx]
         
             clf = svm.SVC()
-            clf.fit(train_data, mvpa.num_labels[train_idx])
+            model = clf.fit(train_data, mvpa.num_labels[train_idx])
             x = clf.predict(test_data)
             correct = x == mvpa.num_labels[test_idx]
             
+            score.append(np.mean(correct))
+            
             # Update trials_selected and trials_predicted
             #trials_selected[c,test_idx] += 1            
-            for i in range(len(x)):
-                trials_predicted[c,test_idx,x-1] += 1
+            #for i in range(len(x)):
+            #    trials_predicted[c,test_idx,x-1] += 1
            
-            voxels_selected[c,feat_idx] += 1
+            #voxels_selected[c,feat_idx] += 1
             
-            for cls in xrange(mvpa.n_class):
-                voxels_correct[c,feat_idx,cls] += np.sum(correct[trials_idx[cls]])                
-                
-            ''' END ITERATION LOOP '''
-
+            #for cls in xrange(mvpa.n_class):
+            #    voxels_correct[c,feat_idx,cls] += np.sum(correct[trials_idx[cls]])                
+            
+            
+            print 'Iteration %i' % (i+1)
+            #''' END ITERATION LOOP '''
+    print "Score: " + str(np.mean(score))
+'''
         for cls in range(mvpa.n_class):
             voxels_correct[c,:,cls] = voxels_correct[c,:,cls] / (voxels_selected[c,:] * n_test)
         
         print 'Done processing ' + sub_dir
         
-        ''' END SUBJECT LOOP '''
             
     maxfilt = np.sum(trials_predicted, axis = 2) == 0
     maxpred = np.argmax(trials_predicted, axis = 2) + 1   
@@ -121,8 +131,8 @@ def mvpa_classify(iterations, n_test, zval):
     voxels_correct[np.isnan(voxels_correct)] = 0
     voxels_correct = np.mean(voxels_correct, axis = 2)    
     print "Averaged classification score: " + str(np.mean(np.diag(np.mean(cm_all, 0))))
-    
-    return(cm_all, voxels_correct)
+    '''
+    #return(cm_all, voxels_correct)
     
 def plot_confusion_matrix(cm, mvpa, title='Confusion matrix', cmap=plt.cm.Reds):
     ''' Code from sklearn's example at http://scikit-learn.org/stable/
