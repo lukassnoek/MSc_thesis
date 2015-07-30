@@ -64,12 +64,15 @@ class mvpa_mat():
     def normalize(self, style):
         if style == 'z':
             self.data = normalize(self.data)
-        
+
+def define_mvpa_design():
+    pass
+
 def extract_class_vector(sub_path, remove_class):
     """ Extracts class of each trial and returns a vector of class labels."""
     
     sub_name = os.path.basename(os.path.normpath(sub_path))
-    to_parse = os.path.join(subject_directory,'design.con')
+    to_parse = os.path.join(sub_path,'design.con')
     
     # Read in design.con
     if os.path.isfile(to_parse):
@@ -84,21 +87,25 @@ def extract_class_vector(sub_path, remove_class):
                 else:
                     class_labels.append(line[1])
 
+        # Remove classes/trials based on remove_class list
         remove_idx = []
         for match in remove_class:
             to_remove = fnmatch.filter(class_labels,'*%s*' % (match))
             
             for name in to_remove:
                 remove_idx.append(class_labels.index(name))
-            
+        
+        remove_idx = list(set(remove_idx))
+        removed = [class_labels.pop(idx) for idx in sorted(remove_idx, reverse=True)]
+
         class_labels = [s.split('_')[0] for s in class_labels]
     
-        return(class_labels)
+        return(class_labels, remove_idx)
                     
     else:
         print('There is no design.con file for ' + sub_name)
     
-def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothing'):
+def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, norm_method = 'nothing'):
     """ 
     Creates subject-specific MVPA matrices, initializes them as an
     mvpa_mat object and saves them as a cpickle file.
@@ -110,6 +117,8 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
                       (e.g. 'graymatter.nii.gz').
     subject_stem    = project-specific subject-prefix
     mask_threshold  = min. threshold of probabilistic FSL mask
+    remove_class    = list with strings to match trials/classes to which need
+                      to be removed (e.g. noise regressors)
    
     Returns:
     Nothing, but creates a dir ('mvpa_mats') with individual pickle files.
@@ -135,16 +144,22 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
     for sub_path in subject_dirs:
         
         # Extract class vector (see definition below)
-        class_labels = extract_class_vector(sub_path)
+        class_labels, remove_idx = extract_class_vector(sub_path, remove_class)
         
         sub_name = os.path.basename(os.path.dirname(sub_path))
         
         print 'Processing ' + sub_name + ' ... ',
         
-        # Generate and sort paths to stat files (COPEs)
+        # Generate and sort paths to stat files (COPEs/tstats)
+        if norm_method == 'nothing':
+            stat_paths = glob.glob(os.path.join(sub_path,'reg_standard','tstat*.nii.gz'))
+        else:
+            stat_paths = glob.glob(os.path.join(sub_path,'reg_standard','cope*.nii.gz'))
         
-        stat_paths = glob.glob(os.path.join(sub_path,'reg_standard','cope*.nii.gz'))
         stat_paths = sort_stat_list(stat_paths) # see function below
+        
+        # Remove trials that shouldn't be analyzed (based on remove_class)
+        removed = [stat_paths.pop(idx) for idx in sorted(remove_idx, reverse=True)]        
         n_stat = len(stat_paths)
 
         if not n_stat == len(class_labels):
@@ -152,7 +167,8 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
                              'of class labels')
 
         if n_stat == 0: 
-            raise ValueError('There are no valid MNI COPES in ' + os.getcwd())
+            raise ValueError('There are no valid COPES/tstats in %s. ' \
+            'Check whether there is a reg_standard directory!' % (os.getcwd()))
         
         # Pre-allocate
         mvpa_data = np.zeros([n_stat,n_features])
@@ -169,6 +185,7 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
         if norm_method == 'univariate':
             varcopes = glob.glob(os.path.join(sub_path,'reg_standard','varcope*.nii.gz'))
             varcopes = sort_stat_list(varcopes)
+            removed = [varcopes.pop(idx) for idx in sorted(remove_idx, reverse=True)] 
             
             for i_trial, varcope in enumerate(varcopes):
                 var = nib.load(varcope).get_data()
@@ -180,6 +197,8 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
             res4d.resize([np.prod(res4d.shape[0:3]), res4d.shape[3]])
             res4d = res4d[mask_index,]            
         
+            if sum(mask_index) > 10000:
+                raise ValueError('Mask probably too large to calculate covariance matrix')
             #res_cov = np.cov(res4d)
         
         mvpa_data = preproc.scale(mvpa_data)
