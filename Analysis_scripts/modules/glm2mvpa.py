@@ -26,6 +26,7 @@ import glob
 import csv
 import cPickle
 from sklearn import preprocessing as preproc
+import fnmatch
 
 class mvpa_mat():
     '''MVPA matrix of trials by features'''
@@ -64,11 +65,11 @@ class mvpa_mat():
         if style == 'z':
             self.data = normalize(self.data)
         
-def extract_class_vector(subject_directory):
+def extract_class_vector(sub_path, remove_class):
     """ Extracts class of each trial and returns a vector of class labels."""
     
-    sub_name = os.path.basename(os.path.normpath(subject_directory))
-    to_parse = subject_directory + '/design.con'
+    sub_name = os.path.basename(os.path.normpath(sub_path))
+    to_parse = os.path.join(subject_directory,'design.con')
     
     # Read in design.con
     if os.path.isfile(to_parse):
@@ -82,8 +83,16 @@ def extract_class_vector(subject_directory):
                     break
                 else:
                     class_labels.append(line[1])
-        
+
+        remove_idx = []
+        for match in remove_class:
+            to_remove = fnmatch.filter(class_labels,'*%s*' % (match))
+            
+            for name in to_remove:
+                remove_idx.append(class_labels.index(name))
+            
         class_labels = [s.split('_')[0] for s in class_labels]
+    
         return(class_labels)
                     
     else:
@@ -108,8 +117,10 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
     Lukas Snoek    
     """
     
-    subject_dirs = glob.glob(os.getcwd() + '/*/*' + subject_stem + '*.feat')
-    mat_dir = os.getcwd() + '/mvpa_mats'
+    data_dir = os.path.join(os.getcwd(), '*%s*' % (subject_stem),'*.feat') 
+    
+    subject_dirs = glob.glob(data_dir)
+    mat_dir = os.path.join(os.getcwd(),'mvpa_mats')
     
     if not os.path.exists(mat_dir):
         os.makedirs(mat_dir)
@@ -126,19 +137,21 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
         # Extract class vector (see definition below)
         class_labels = extract_class_vector(sub_path)
         
-        sub_name = os.path.basename(sub_path).split(".")[0]
+        sub_name = os.path.basename(os.path.dirname(sub_path))
         
         print 'Processing ' + sub_name + ' ... ',
         
         # Generate and sort paths to stat files (COPEs)
-        stat_paths = glob.glob(sub_path + '/stats_new/cope*mni.nii.gz')
+        
+        stat_paths = glob.glob(os.path.join(sub_path,'reg_standard','cope*.nii.gz'))
         stat_paths = sort_stat_list(stat_paths) # see function below
         n_stat = len(stat_paths)
 
         if not n_stat == len(class_labels):
             raise ValueError('The number of trials do not match the number ' \
                              'of class labels')
-        elif n_stat == 0:
+
+        if n_stat == 0: 
             raise ValueError('There are no valid MNI COPES in ' + os.getcwd())
         
         # Pre-allocate
@@ -154,7 +167,7 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
             pass
         
         if norm_method == 'univariate':
-            varcopes = glob.glob(sub_path + '/stats_new/varcope*mni.nii.gz')
+            varcopes = glob.glob(os.path.join(sub_path,'reg_standard','varcope*.nii.gz'))
             varcopes = sort_stat_list(varcopes)
             
             for i_trial, varcope in enumerate(varcopes):
@@ -173,8 +186,9 @@ def create_subject_mats(mask, subject_stem, mask_threshold,norm_method = 'nothin
         
         # Initializing mvpa_mat object, which will be saved as a pickle file
         to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, mask_shape, class_labels) 
+        filename = os.path.join(mat_dir, '%s.cPickle' % (sub_name))
         
-        with open(mat_dir + '/' + sub_name + '.cPickle', 'wb') as handle:
+        with open(filename, 'wb') as handle:
             cPickle.dump(to_save, handle)
     
         print 'done.'
