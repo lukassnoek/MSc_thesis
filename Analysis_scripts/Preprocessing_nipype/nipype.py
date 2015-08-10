@@ -42,9 +42,6 @@ datasource = pe.Node(interface=nio.DataGrabber(infields=['subject_id'],
 datasource.inputs.base_directory = ToProcess
 datasource.inputs.template = '%s/%s/%s.nii'
 
-
-
-
 T1_paths,T1_names = cds.get_filepaths('WIP_sT1',ToProcess)
 
 skullstrip = pe.Node(interface=fsl.BET(), name = 'skullstrip')
