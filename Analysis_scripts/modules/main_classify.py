@@ -10,7 +10,11 @@ import os
 import numpy as np
 import itertools
 import cPickle
+import nibabel as nib
+
 from sklearn import svm
+from sklearn.lda import LDA
+
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
 
@@ -18,59 +22,49 @@ def draw_random_subsample(mvpa, n_test):
     ''' Draws random subsample of test trials for each class '''
     test_ind = np.zeros(len(mvpa.num_labels), dtype=np.int)
     
+    
     for c in xrange(mvpa.n_class):
-        ind = np.random.choice(mvpa.class_idx[c], n_test, replace=False)            
+        ind = np.random.choice(mvpa.trial_idx[c], n_test, replace=False)            
         test_ind[ind] = 1
-        
+        print "test ind: ", ind
     return test_ind.astype(bool)
     
-def select_voxels(mvpa, train_idx, threshold):
+def select_voxels(mvpa, train_idx, zval):
     ''' 
     Feature selection. Runs on single subject data
     '''
-    
+   
     # Setting useful parameters & pre-allocation
-    n_test = np.sum(train_idx) / mvpa.n_class
-    trial_idx = [range(n_test*x,n_test*(x+1)) for x in range(mvpa.n_class)]
-    data = mvpa.data[train_idx,] # should be moved to main_classify() later
+    data = mvpa.data[train_idx,] 
     av_patterns = np.zeros((mvpa.n_class, mvpa.n_features))
     
     # Calculate mean patterns
     for c in xrange(mvpa.n_class):         
-        av_patterns[c,] = np.mean(data[trial_idx[c],], axis = 0)
+        av_patterns[c,:] = np.mean(data[mvpa.class_idx[c][train_idx],:], axis = 0)
        
     # Create difference vectors, z-score standardization, absolute
     comb = list(itertools.combinations(range(1,mvpa.n_class+1),2))
     diff_patterns = np.zeros((len(comb), mvpa.n_features))
         
     for i, cb in enumerate(comb):        
-        x = np.subtract(av_patterns[cb[0]-1,], av_patterns[cb[1]-1,])
+        x = av_patterns[cb[0]-1] - av_patterns[cb[1]-1,:]
         diff_patterns[i,] = np.abs((x - x.mean()) / x.std()) 
     
     diff_vec = np.mean(diff_patterns, axis = 0)
     
-    feat_idx = diff_vec > threshold
+    feat_idx = diff_vec > zval
     
-    return(feat_idx)
-   
+    return(feat_idx, diff_vec)
+
 def mvpa_classify(iterations, n_test, zval):
     
-    subject_dirs = glob.glob(os.getcwd() + '/mvpa_mats/*cPickle')      
-    n_sub = len(subject_dirs)      
-   
+    subject_dirs = glob.glob(os.path.join(os.getcwd(),'mvpa_mats','*cPickle'))      
+    
     # We need to load the first sub to extract some info
     mvpa = cPickle.load(open(subject_dirs[0]))
-    mvpa.data[np.isnan(mvpa.data)] = 0
     
-    #trials_selected = np.zeros((n_sub, mvpa.n_trials))     
-    trials_predicted = np.zeros((n_sub, mvpa.n_trials, mvpa.n_class))
-    
-    # Backprojection set-up
-    voxels_selected = np.zeros((n_sub, mvpa.n_features))
-    voxels_correct = np.zeros((n_sub, mvpa.n_features, mvpa.n_class))
- 
-    trials_idx = [range(n_test*x,n_test*(x+1)) for x in range(mvpa.n_class)]
-    
+    clf = svm.LinearSVC()
+        
     for c, sub_dir in enumerate(subject_dirs):
         
         if sub_dir is not subject_dirs[0]:
@@ -80,37 +74,55 @@ def mvpa_classify(iterations, n_test, zval):
         for i in xrange(iterations):
             test_idx = draw_random_subsample(mvpa, n_test)
             train_idx = np.invert(test_idx)
-            feat_idx = select_voxels(mvpa,train_idx,zval)
             
+            feat_idx,diff_vec = select_voxels(mvpa,train_idx,zval)
+    
+            feat_idx_dd,diff_vec_dd = select_voxels(mvpa,np.ones(len(mvpa.num_labels)).astype(bool),zval)            
+            
+            out = np.zeros(mvpa.mask_index.shape)        
+            out[mvpa.mask_index] = diff_vec_dd
+            out = np.reshape(out, mvpa.mask_shape)            
+            
+            out[out < zval] = 0            
+            img = nib.Nifti1Image(out, np.eye(4))
+            nib.save(img, os.path.join(os.path.expanduser('~'),'voxel_selection.nii.gz'))            
             
             if np.sum(feat_idx) == 0:
                  raise ValueError('Z-threshold too high! No voxels selected ' \
                  + 'at iteration ' + str(i) + ' for ' + mvpa.subject_name)
             
             train_data = mvpa.data[train_idx,:][:,feat_idx]
+            train_data_dd = mvpa.data[train_idx,:][:,feat_idx_dd]
+            
             test_data = mvpa.data[test_idx,:][:,feat_idx]
-        
-            clf = svm.SVC()
-            model = clf.fit(train_data, mvpa.num_labels[train_idx])
-            x = clf.predict(test_data)
-            correct = x == mvpa.num_labels[test_idx]
+            test_data_dd = mvpa.data[test_idx,:][:,feat_idx_dd]
             
-            score.append(np.mean(correct))
+            # everything
+            #plt.imshow(np.corrcoef(mvpa.data), interpolation='none')
             
-            # Update trials_selected and trials_predicted
-            #trials_selected[c,test_idx] += 1            
-            #for i in range(len(x)):
-            #    trials_predicted[c,test_idx,x-1] += 1
-           
-            #voxels_selected[c,feat_idx] += 1
+            #plt.imshow(np.corrcoef(mvpa.data[:,feat_idx]),interpolation='none')
+            #plt.colorbar()
             
-            #for cls in xrange(mvpa.n_class):
-            #    voxels_correct[c,feat_idx,cls] += np.sum(correct[trials_idx[cls]])                
+            #plt.imshow(np.corrcoef(train_data),interpolation='none')
+            #plt.imshow(np.corrcoef(train_data_dd),interpolation='none')
             
+            train_labels = mvpa.num_labels[train_idx]
+            test_labels = mvpa.num_labels[test_idx]
             
-            print 'Iteration %i' % (i+1)
-            #''' END ITERATION LOOP '''
-    print "Score: " + str(np.mean(score))
+            model = clf.fit(train_data, train_labels)
+            score_train = clf.score(train_data, train_labels)
+            score_test = clf.score(test_data, test_labels)            
+            
+            model = clf.fit(train_data_dd, train_labels)
+            score_test_dd = clf.score(test_data_dd, test_labels) 
+            
+            print "score train: ", score_train
+            print "score test: ", score_test
+            print "score doubledip: ", score_test_dd
+            
+            score.append(np.mean(score_test))
+            
+        print "Score: ", np.mean(score)
 '''
         for cls in range(mvpa.n_class):
             voxels_correct[c,:,cls] = voxels_correct[c,:,cls] / (voxels_selected[c,:] * n_test)

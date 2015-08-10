@@ -30,43 +30,36 @@ import fnmatch
 
 class mvpa_mat():
     '''MVPA matrix of trials by features'''
-    def __init__(self, data, subject_name, mask_name, mask_index, mask_shape, class_labels):
-        # Initialized attributes        
-        self.data = data
-        self.subject_name = subject_name
-        self.mask_name = mask_name
-        self.mask_index = mask_index        
-        self.mask_shape = mask_shape
-        self.class_labels = class_labels        
+    def __init__(self, data, subject_name, mask_name, mask_index, mask_shape, 
+                 class_labels, num_labels, grouping):
         
-        # Computed attributes (based on initialized attributes)
+        # Primary data      
+        self.data = data                        # data (features * trials)
+        self.subject_name = subject_name        # subject name
         self.n_features = self.data.shape[1]
         self.n_trials = self.data.shape[0]
         
-        class_names = []
-        [class_names.append(i) for i in class_labels if not class_names.count(i)]
-        self.class_names = class_names
-        self.n_class = len(class_names)        
-        self.n_inst = self.n_trials / self.n_class
-        self.class_idx = [np.arange(self.n_inst*i,self.n_inst*i+self.n_inst) \
-                          for i in range(self.n_class)]
-
-        # Create numeric label vector
-        n_class = len(class_names)
-        num_labels = []        
+        # Information about mask        
+        self.mask_name = mask_name              # Name of nifti-file  
+        self.mask_index = mask_index            # index relative to MNI
+        self.mask_shape = mask_shape            # shape of mask (usually mni)
         
-        for i in xrange(1, n_class+1):
-            for j in xrange(1, self.n_inst+1):
-                num_labels.append(1*i)
-
-        self.num_labels = np.asarray(num_labels)
-
+        # Information about condition/class        
+        self.class_labels = np.asarray(class_labels)        # class-labels trials 
+        self.class_names = np.unique(self.class_labels)
+        self.n_class = len(np.unique(num_labels)) 
+        self.n_inst = [np.sum(cls == num_labels) \
+                       for cls in np.unique(num_labels)]
+                  
+        self.class_idx = [num_labels == cls for cls in np.unique(num_labels)]
+        self.trial_idx = [np.where(num_labels == cls)[0] \
+                          for cls in np.unique(num_labels)]
+                              
+        self.num_labels = num_labels
+        self.grouping = grouping
+        
     def normalize(self, style):
-        if style == 'z':
-            self.data = normalize(self.data)
-
-def define_mvpa_design():
-    pass
+        pass
 
 def extract_class_vector(sub_path, remove_class):
     """ Extracts class of each trial and returns a vector of class labels."""
@@ -105,7 +98,7 @@ def extract_class_vector(sub_path, remove_class):
     else:
         print('There is no design.con file for ' + sub_name)
     
-def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, norm_method = 'nothing'):
+def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, grouping = [], norm_method = 'nothing'):
     """ 
     Creates subject-specific MVPA matrices, initializes them as an
     mvpa_mat object and saves them as a cpickle file.
@@ -146,6 +139,24 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, norm_m
         # Extract class vector (see definition below)
         class_labels, remove_idx = extract_class_vector(sub_path, remove_class)
         
+        # Grouping
+        num_labels = np.zeros(len(class_labels))
+        for i,group in enumerate(grouping):
+            
+            if len(group) > 1:
+                matches = []
+                for g in group:
+                    matches.append(fnmatch.filter(class_labels,'*%s*' % (g)))
+                matches = [ x for y in matches for x in y]
+            else:
+                matches = fnmatch.filter(class_labels,'*%s*' % (group))
+                matches = list(set(matches))
+
+            for j,match in enumerate(matches):
+                for j,lab in enumerate(class_labels):
+                    if match == lab:
+                        num_labels[j] = i+1
+                        
         sub_name = os.path.basename(os.path.dirname(sub_path))
         
         print 'Processing ' + sub_name + ' ... ',
@@ -191,7 +202,7 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, norm_m
                 var = nib.load(varcope).get_data()
                 var_sq = np.sqrt(var.ravel()[mask_index])
                 mvpa_data[i_trial,] = mvpa_data[i_trial,] / var_sq
-                
+           
         if norm_method == 'multivariate':
             res4d = nib.load(sub_path + '/stats_new/res4d_mni.nii.gz').get_data()
             res4d.resize([np.prod(res4d.shape[0:3]), res4d.shape[3]])
@@ -201,10 +212,12 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, norm_m
                 raise ValueError('Mask probably too large to calculate covariance matrix')
             #res_cov = np.cov(res4d)
         
+        mvpa_data[np.isnan(mvpa_data)] = 0
         mvpa_data = preproc.scale(mvpa_data)
         
         # Initializing mvpa_mat object, which will be saved as a pickle file
-        to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, mask_shape, class_labels) 
+        to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, 
+                           mask_shape, class_labels, num_labels, grouping) 
         filename = os.path.join(mat_dir, '%s.cPickle' % (sub_name))
         
         with open(filename, 'wb') as handle:

@@ -168,7 +168,7 @@ def setup_analysis_skeleton(project_dir,sub_stem):
     TP_dir = os.path.join(project_dir,'ToProcess')
     move_files(project_dir, TP_dir, '')
     
-    all_files = glob.glob(TP_dir + '/*' + sub_stem + '*')
+    all_files = glob.glob(os.path.join(TP_dir,'*%s*' % (sub_stem)))
     all_files = [os.path.basename(f) for f in all_files]
     
     prefixes = [pref[:len(sub_stem)+4] for pref in all_files]
