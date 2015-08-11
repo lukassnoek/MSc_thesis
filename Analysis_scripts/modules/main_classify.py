@@ -17,21 +17,44 @@ from sklearn.lda import LDA
 
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
+from sklearn.cluster import DBSCAN
 
 def draw_random_subsample(mvpa, n_test):
-    ''' Draws random subsample of test trials for each class '''
+    ''' 
+    Draws random subsample of test trials for each class.
+    Assumes the mvpa_mat() object as input.
+    
+    Args:
+        mvpa (mvpa_mat): instance of mvpa_mat (see glm2mvpa module)
+        n_test (int): the number of test-trial to be drawn PER CLASS
+    
+    Returns:
+        test_ind (bool): boolean vector of len(mvpa.n_trials)
+    '''
+    
     test_ind = np.zeros(len(mvpa.num_labels), dtype=np.int)
     
     
     for c in xrange(mvpa.n_class):
         ind = np.random.choice(mvpa.trial_idx[c], n_test, replace=False)            
         test_ind[ind] = 1
-        print "test ind: ", ind
     return test_ind.astype(bool)
     
-def select_voxels(mvpa, train_idx, zval):
+def select_voxels(mvpa, train_idx, zval, method):
     ''' 
-    Feature selection. Runs on single subject data
+    Feature selection based on univariate differences between
+    patterns averaged across trials from the same class. 
+    
+    Args:
+        mvpa (mvpa_mat): instance of mvpa_mat (see glm2mvpa module)
+        train_idx (bool): boolean vector with train-trials (inverse of test_idx)
+        zval (float/int): z-value cutoff/threshold for normalized pattern differences
+        method (str): method to select differences; 'pairwise' = pairwise univar.
+                      differences; 'fstat' = differences averaged across classes.
+                      
+    Returns:
+        feat_idx (bool): index with selected features of len(mvpa.n_features)
+        diff_vec (ndarray): array with actual difference scores
     '''
    
     # Setting useful parameters & pre-allocation
@@ -50,15 +73,33 @@ def select_voxels(mvpa, train_idx, zval):
         x = av_patterns[cb[0]-1] - av_patterns[cb[1]-1,:]
         diff_patterns[i,] = np.abs((x - x.mean()) / x.std()) 
     
-    diff_vec = np.mean(diff_patterns, axis = 0)
-    
-    feat_idx = diff_vec > zval
+    if diff_patterns.shape[0] > 1 and method == 'fstat':
+        diff_vec = np.mean(diff_patterns, axis = 0) 
+        feat_idx = diff_vec > zval 
+    elif diff_patterns.shape[0] > 1 and method == 'pairwise':
+        diff_vec = np.mean(diff_patterns, axis = 0)        
+        feat_idx = np.sum(diff_patterns > zval, axis = 0) > 1       
+    else:
+        diff_vec = diff_patterns
+        feat_idx = diff_vec > zval
     
     return(feat_idx, diff_vec)
 
-def mvpa_classify(iterations, n_test, zval):
+def mvpa_classify(sub_stem, iterations, n_test, zval, method):
+    '''
+    Main classification function that classifies subject-specific
+    mvpa_mat objects according to their classes (specified in .num_labels).
+    Very rudimentary version atm.
     
-    subject_dirs = glob.glob(os.path.join(os.getcwd(),'mvpa_mats','*cPickle'))      
+    Args:
+        iterations (int): amount of cross-validation iterations
+        n_test (int): amount of test-trials per iteration (see select_voxels)
+        zval (float): z-value cutoff score (see select_voxels)
+        method (str): method to determine univariate differences between mean
+                      patterns across classes.
+    '''
+    
+    subject_dirs = glob.glob(os.path.join(os.getcwd(),'mvpa_mats','*%s*cPickle' % sub_stem))      
     
     # We need to load the first sub to extract some info
     mvpa = cPickle.load(open(subject_dirs[0]))
@@ -75,9 +116,9 @@ def mvpa_classify(iterations, n_test, zval):
             test_idx = draw_random_subsample(mvpa, n_test)
             train_idx = np.invert(test_idx)
             
-            feat_idx,diff_vec = select_voxels(mvpa,train_idx,zval)
+            feat_idx,diff_vec = select_voxels(mvpa,train_idx,zval,method = 'pairwise')
     
-            feat_idx_dd,diff_vec_dd = select_voxels(mvpa,np.ones(len(mvpa.num_labels)).astype(bool),zval)            
+            feat_idx_dd,diff_vec_dd = select_voxels(mvpa,np.ones(len(mvpa.num_labels)).astype(bool),zval,method = 'pairwise')            
             
             out = np.zeros(mvpa.mask_index.shape)        
             out[mvpa.mask_index] = diff_vec_dd
@@ -106,8 +147,8 @@ def mvpa_classify(iterations, n_test, zval):
             #plt.imshow(np.corrcoef(train_data),interpolation='none')
             #plt.imshow(np.corrcoef(train_data_dd),interpolation='none')
             
-            train_labels = mvpa.num_labels[train_idx]
-            test_labels = mvpa.num_labels[test_idx]
+            train_labels = np.asarray(mvpa.num_labels)[train_idx]
+            test_labels = np.asarray(mvpa.num_labels)[test_idx]
             
             model = clf.fit(train_data, train_labels)
             score_train = clf.score(train_data, train_labels)
@@ -116,13 +157,9 @@ def mvpa_classify(iterations, n_test, zval):
             model = clf.fit(train_data_dd, train_labels)
             score_test_dd = clf.score(test_data_dd, test_labels) 
             
-            print "score train: ", score_train
-            print "score test: ", score_test
-            print "score doubledip: ", score_test_dd
-            
             score.append(np.mean(score_test))
             
-        print "Score: ", np.mean(score)
+        print "Score subject %i: %f" % (c+1,np.mean(score))
 '''
         for cls in range(mvpa.n_class):
             voxels_correct[c,:,cls] = voxels_correct[c,:,cls] / (voxels_selected[c,:] * n_test)
