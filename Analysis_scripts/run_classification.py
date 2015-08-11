@@ -7,6 +7,7 @@ Created on Mon Aug 10 17:43:03 2015
 
 # Set-up
 from Modules import main_classify
+reload(main_classify)
 from os.path import expanduser
 home = expanduser("~")
 import os
@@ -22,11 +23,12 @@ if sys.platform[0:5] == 'linux':
 else:
     data_dir = os.path.join('Z:/','fMRI Projects','fMRI Project DynamicAffect')
 
-feat_dir = os.path.join(data_dir,'Firstlevel_posttest')
+feat_dir = os.path.join(data_dir,'DecodingEmotions')
 os.chdir(feat_dir)
 
 # Parameters
 iterations = 20
-n_test = 2
-zval = 2.5
-main_classify.mvpa_classify(iterations, n_test, zval)
+n_test = 4
+zval = 2.3
+method = 'fstat'
+main_classify.mvpa_classify('merged',iterations, n_test, zval, method)

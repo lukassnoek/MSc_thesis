@@ -23,23 +23,24 @@ else:
 
 os.chdir(data_dir)
 
-# Paramters
+# Parameters
 ROI_dir = os.path.join(home,'Dropbox/ResMas_UvA/Thesis/ROIs')
 GM_mask = os.path.join(ROI_dir, 'GrayMatter.nii.gz')
 OFC_mask = os.path.join(ROI_dir, 'OrbitofrontalCortex.nii.gz')
 FL_mask = os.path.join(ROI_dir,'FrontalLobe.nii.gz')
 MNI_mask = os.path.join(ROI_dir, 'MNI152_T1_2mm_brain.nii.gz')
 
-feat_dir = os.path.join(data_dir,'Firstlevel_posttest')
+feat_dir = os.path.join(data_dir,'DecodingEmotions')
 os.chdir(feat_dir)
 
 from Modules import glm2mvpa
+reload(glm2mvpa)
 
-mask = GM_mask
-subject_stem = 'da'
+mask = OFC_mask
+subject_stem = 'HWW'
 mask_threshold = 10
-remove_class = ['eval','loc']
-grouping = [['pos','neg'],'neu']
+remove_class = []
+grouping = []
 norm_method = 'univariate'
 
 glm2mvpa.create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
