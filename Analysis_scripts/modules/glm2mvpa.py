@@ -27,6 +27,8 @@ import csv
 import cPickle
 from sklearn import preprocessing as preproc
 import fnmatch
+from itertools import chain, izip
+import shutil
 
 class mvpa_mat():
     '''MVPA matrix of trials by features'''
@@ -124,8 +126,10 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
     subject_dirs = glob.glob(data_dir)
     mat_dir = os.path.join(os.getcwd(),'mvpa_mats')
     
-    if not os.path.exists(mat_dir):
-        os.makedirs(mat_dir)
+    if os.path.exists(mat_dir):
+        shutil.rmtree(mat_dir)
+    
+    os.makedirs(mat_dir)
     
     # Load mask, create index
     mask_name = os.path.basename(mask)
@@ -140,10 +144,13 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
         class_labels, remove_idx = extract_class_vector(sub_path, remove_class)
         
         # Grouping
+        if len(grouping) == 0:
+            grouping = np.unique(class_labels)
+            
         num_labels = np.zeros(len(class_labels))
         for i,group in enumerate(grouping):
             
-            if len(group) > 1:
+            if type(group) == list:
                 matches = []
                 for g in group:
                     matches.append(fnmatch.filter(class_labels,'*%s*' % (g)))
@@ -152,10 +159,10 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
                 matches = fnmatch.filter(class_labels,'*%s*' % (group))
                 matches = list(set(matches))
 
-            for j,match in enumerate(matches):
-                for j,lab in enumerate(class_labels):
+            for match in matches:
+                for k,lab in enumerate(class_labels):
                     if match == lab:
-                        num_labels[j] = i+1
+                        num_labels[k] = i+1
                         
         sub_name = os.path.basename(os.path.dirname(sub_path))
         
@@ -218,7 +225,11 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
         # Initializing mvpa_mat object, which will be saved as a pickle file
         to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, 
                            mask_shape, class_labels, num_labels, grouping) 
-        filename = os.path.join(mat_dir, '%s.cPickle' % (sub_name))
+        filename = os.path.join(mat_dir, '%s_run1.cPickle' % (sub_name))
+        
+        
+        if os.path.exists(filename):        
+            filename = os.path.join(mat_dir, '%s_run2.cPickle' % (sub_name))
         
         with open(filename, 'wb') as handle:
             cPickle.dump(to_save, handle)
@@ -242,43 +253,47 @@ def sort_stat_list(stat_list):
     return(sorted_list)
     
 def merge_runs():
+    '''
+    Merges mvpa_mat objects from multiple runs. 
+    Incomplete; assumes only two runs for now.
+    '''
     
-    sub_paths = [os.path.abspath(path) for path in glob.glob(os.getcwd() + '/mvpa_mats/*WIPPM*cPickle*')]
-    abbr = [os.path.basename(path)[6] for path in sub_paths]    
-    sub_paths = [x for y,x in sorted(zip(abbr, sub_paths))]
+    sub_paths = glob.glob(os.path.join(os.getcwd(),'mvpa_mats','*cPickle*'))
+    sub_paths = zip(sub_paths[::2], sub_paths[1::2])    
     
     n_sub = len(sub_paths)
     
-    i = 0
-    for dummy in xrange(n_sub/2):
-        run1 = cPickle.load(open(sub_paths[i]))
-        run2 = cPickle.load(open(sub_paths[i+1]))
+    for files in sub_paths:
+        run1 = cPickle.load(open(files[0]))
+        run2 = cPickle.load(open(files[1]))
         
-        data = np.zeros((run1.n_trials*2, run1.n_features))
-        class_labels = []
+        merged_grouping = run1.grouping
+        merged_mask_index = run1.mask_index 
+        merged_mask_shape = run1.mask_shape
+        merged_mask_name = run1.mask_name
+        merged_name = run1.subject_name      
         
-        j = 0
-        for k in xrange(run1.n_trials-1):
-            data[j,:] = run1.data[k,:]
-            data[j+1,:] = run2.data[k,:]
-                        
-            class_labels.append(run1.class_labels[k])
-            class_labels.append(run2.class_labels[k])
+        merged_data = np.empty((run1.data.shape[0] + run2.data.shape[0], run1.data.shape[1]))
+        merged_data[::2,:] = run1.data
+        merged_data[1::2,:] = run2.data
+        
+        merged_class_labels = list(chain.from_iterable(izip(run1.class_labels,run2.class_labels)))        
+        merged_num_labels = list(chain.from_iterable(izip(run1.num_labels,run2.num_labels)))
+     
+        class_idx = []
+        trial_idx = []
+        for i in xrange(run1.n_class):
+            to_append = list(chain.from_iterable(izip(run1.class_idx[i],run2.class_idx[i])))
+            class_idx.append(to_append)
             
-            j += 2
+            #to_append = list(chain.from_iterable(izip(run1.trial_idx[i],run2.trial_idx[i]+len(class_idx)+20+1)))
+            #trial_idx.append(to_append)
+                  
+        to_save = mvpa_mat(merged_data, merged_name, merged_mask_name, 
+                           merged_mask_index, merged_mask_shape, merged_class_labels, 
+                           merged_num_labels, merged_grouping)
         
-        class_labels.append(run1.class_labels[k+1])
-        class_labels.append(run2.class_labels[k+1])
-        
-        name = os.path.basename(sub_paths[i])[0:7] + '_merged'
-        mask_name = run1.mask_name
-        mask_index = run1.mask_index
-        mask_shape = run1.mask_shape
-        
-        to_save = mvpa_mat(data,name,mask_name, mask_index, mask_shape, class_labels)
-        
-        with open(os.getcwd() + '/' + name + '.cPickle', 'wb') as handle:
+        with open(os.path.join(os.getcwd(),'mvpa_mats',merged_name + '_merged.cPickle'), 'wb') as handle:
             cPickle.dump(to_save, handle)
             
-        i += 2
-        print "Merged subject %i " % dummy
+        print "Merged subject %s " % merged_name
