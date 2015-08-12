@@ -2,6 +2,9 @@
 """
 Main classification module
 
+To do:
+- separate mvpa_mat into header (cPickle) and data (HDF5)
+
 Lukas Snoek
 """
 
@@ -78,20 +81,21 @@ def select_voxels(mvpa, train_idx, zval, method):
         feat_idx = diff_vec > zval 
     elif diff_patterns.shape[0] > 1 and method == 'pairwise':
         diff_vec = np.mean(diff_patterns, axis = 0)        
-        feat_idx = np.sum(diff_patterns > zval, axis = 0) > 1       
+        feat_idx = np.sum(diff_patterns > zval, axis = 0) > 0       
     else:
         diff_vec = diff_patterns
         feat_idx = diff_vec > zval
     
     return(feat_idx, diff_vec)
 
-def mvpa_classify(sub_stem, iterations, n_test, zval, method):
+def mvpa_classify(identifier, iterations, n_test, zval, method):
     '''
     Main classification function that classifies subject-specific
     mvpa_mat objects according to their classes (specified in .num_labels).
     Very rudimentary version atm.
     
     Args:
+        identifier (str): string to be matched when globbing cPickle-files         
         iterations (int): amount of cross-validation iterations
         n_test (int): amount of test-trials per iteration (see select_voxels)
         zval (float): z-value cutoff score (see select_voxels)
@@ -99,9 +103,10 @@ def mvpa_classify(sub_stem, iterations, n_test, zval, method):
                       patterns across classes.
     '''
     
-    subject_dirs = glob.glob(os.path.join(os.getcwd(),'mvpa_mats','*%s*cPickle' % sub_stem))      
+    subject_dirs = glob.glob(os.path.join(os.getcwd(),'mvpa_mats','*%s*cPickle' % identifier))      
     
     # We need to load the first sub to extract some info
+    print "Processing file %s..." % os.path.basename(subject_dirs[0])
     mvpa = cPickle.load(open(subject_dirs[0]))
     
     clf = svm.LinearSVC()
@@ -109,6 +114,7 @@ def mvpa_classify(sub_stem, iterations, n_test, zval, method):
     for c, sub_dir in enumerate(subject_dirs):
         
         if sub_dir is not subject_dirs[0]:
+            print "Processing file %s..." % os.path.basename(sub_dir)
             mvpa = cPickle.load(open(sub_dir))
     
         score = []
@@ -138,15 +144,8 @@ def mvpa_classify(sub_stem, iterations, n_test, zval, method):
             test_data = mvpa.data[test_idx,:][:,feat_idx]
             test_data_dd = mvpa.data[test_idx,:][:,feat_idx_dd]
             
-            # everything
-            #plt.imshow(np.corrcoef(mvpa.data), interpolation='none')
-            
-            #plt.imshow(np.corrcoef(mvpa.data[:,feat_idx]),interpolation='none')
-            #plt.colorbar()
-            
-            #plt.imshow(np.corrcoef(train_data),interpolation='none')
             #plt.imshow(np.corrcoef(train_data_dd),interpolation='none')
-            
+
             train_labels = np.asarray(mvpa.num_labels)[train_idx]
             test_labels = np.asarray(mvpa.num_labels)[test_idx]
             

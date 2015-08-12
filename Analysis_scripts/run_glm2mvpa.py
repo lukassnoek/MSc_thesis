@@ -5,25 +5,34 @@ Created on Mon Aug 10 17:36:06 2015
 @author: lsnoek1
 """
 
-# Set-up
+################################ SETUP dirs ################################
+import sys
+import platform
 from os.path import expanduser
 home = expanduser("~")
 import os
 
-import sys
-script_dir = os.path.join(home,'Dropbox','ResMas_UvA','Thesis','Git','Analysis_scripts')
-sys.path.append(script_dir)
-
-if sys.platform[0:5] == 'linux':
-    data_dir = os.path.join('/run/user/1000/gvfs',
-    'smb-share:server=bigbrother.fmg.uva.nl,share=fmri_projects$',
-    'fMRI Project DynamicAffect')
-else:
+if 'Windows' in platform.platform():
     data_dir = os.path.join('Z:/','fMRI Projects','fMRI Project DynamicAffect')
+    script_dir = os.path.join(home,'Dropbox','ResMas_UvA','Thesis','Git',
+                              'Analysis_scripts')
+    
+if 'precise' in platform.platform():
+    data_dir = os.path.join(home,'.gvfs','storage on bigbrother')
+    script_dir = os.path.join(home,'Git','Analysis_scripts')
 
-os.chdir(data_dir)
+if 'vivid' in platform.platform():
+    data_dir = os.path.join('/run/user/1000/gvfs',
+                            'smb-share:server=bigbrother.fmg.uva.nl,share=fmri_projects$',
+                            'fMRI Project DynamicAffect')
+    script_dir = os.path.join(home,'Dropbox','ResMas_UvA','Thesis','Git',
+                              'Analysis_scripts')    
 
-# Parameters
+sys.path.append(script_dir)    
+
+################################ SETUP params ################################
+from Modules.glm2mvpa import create_subject_mats
+
 ROI_dir = os.path.join(home,'Dropbox/ResMas_UvA/Thesis/ROIs')
 GM_mask = os.path.join(ROI_dir, 'GrayMatter.nii.gz')
 OFC_mask = os.path.join(ROI_dir, 'OrbitofrontalCortex.nii.gz')
@@ -33,10 +42,7 @@ MNI_mask = os.path.join(ROI_dir, 'MNI152_T1_2mm_brain.nii.gz')
 feat_dir = os.path.join(data_dir,'DecodingEmotions')
 os.chdir(feat_dir)
 
-from Modules import glm2mvpa
-reload(glm2mvpa)
-
-mask = OFC_mask
+mask = GM_mask
 subject_stem = 'HWW'
 mask_threshold = 10
 remove_class = []
@@ -46,3 +52,4 @@ norm_method = 'univariate'
 glm2mvpa.create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
                              grouping = grouping, norm_method = 'univariate')
 
+#glm2mvpa.merge_runs()
