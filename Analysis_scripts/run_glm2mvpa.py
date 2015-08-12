@@ -18,7 +18,7 @@ if 'Windows' in platform.platform():
                               'Analysis_scripts')
     
 if 'precise' in platform.platform():
-    data_dir = os.path.join(home,'.gvfs','storage on bigbrother')
+    data_dir = os.path.join(home,'.gvfs','storage on bigbrother','fMRI Projects','fMRI Project DynamicAffect')
     script_dir = os.path.join(home,'Git','Analysis_scripts')
 
 if 'vivid' in platform.platform():
@@ -31,9 +31,9 @@ if 'vivid' in platform.platform():
 sys.path.append(script_dir)    
 
 ################################ SETUP params ################################
-from Modules.glm2mvpa import create_subject_mats
+from modules.glm2mvpa import create_subject_mats
 
-ROI_dir = os.path.join(home,'Dropbox/ResMas_UvA/Thesis/ROIs')
+ROI_dir = os.path.join(data_dir,'ROIs')
 GM_mask = os.path.join(ROI_dir, 'GrayMatter.nii.gz')
 OFC_mask = os.path.join(ROI_dir, 'OrbitofrontalCortex.nii.gz')
 FL_mask = os.path.join(ROI_dir,'FrontalLobe.nii.gz')
@@ -44,12 +44,12 @@ os.chdir(feat_dir)
 
 mask = GM_mask
 subject_stem = 'HWW'
-mask_threshold = 10
+mask_threshold = 30
 remove_class = []
 grouping = []
 norm_method = 'univariate'
 
-glm2mvpa.create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
+create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
                              grouping = grouping, norm_method = 'univariate')
 
 #glm2mvpa.merge_runs()
