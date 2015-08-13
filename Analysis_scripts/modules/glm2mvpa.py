@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Module to create subject-specific MVPA matrices of trials X voxels.
+Module to create subject-specific mvp matrices of trials X voxels.
 Contains:
-1. mvpa_mat class;
-2. create_subject_mats (main mvpa_mat creation);
+1. mvp_mat class;
+2. create_subject_mats (main mvp_mat creation);
 3. Some uninteresting but necessary file parsing/transforming functions
 
 The creat_subject_mats function does the following for each subject:
@@ -11,8 +11,8 @@ The creat_subject_mats function does the following for each subject:
 2. Indexes vectorized copes with specified mask (e.g. ROI/gray matter)
 3. Normalizes COPEs by their variance (sqrt(VARCOPE)); this will be extended 
 with a multivariate normalization technique in the future
-4. Initializes the result as an mvpa_mat
-5. Saves subject-specific mvpa_mat as .cpickle file 
+4. Initializes the result as an mvp_mat
+5. Saves subject-specific mvp_mat as .cpickle file 
 
 Lukas Snoek, master thesis Dynamic Affect, 2015
 """
@@ -27,29 +27,33 @@ import csv
 import cPickle
 import fnmatch
 import shutil
+import h5py
 
 from os.path import join as opj
 from sklearn import preprocessing as preproc
 from itertools import chain, izip
 
 
-class mvpa_mat:
-    """MVPA matrix of trials by features"""
+class MVPHeader:
+    """
+    Contains info about multivariate pattern fMRI data.
+    """
 
-    def __init__(self, data, subject_name, mask_name, mask_index, mask_shape, 
-                 class_labels, num_labels, grouping):
+    def __init__(self, data, subject_name, mask_name, mask_index, mask_shape,
+                 mask_threshold, class_labels, num_labels, grouping):
 
-        # Primary data      
-        self.data = data                        # data (features * trials)
+        # Primary data
+        self.data = None
         self.subject_name = subject_name        # subject name
-        self.n_features = self.data.shape[1]
-        self.n_trials = self.data.shape[0]
-        
+        self.n_features = data.shape[1]
+        self.n_trials = data.shape[0]
+
         # Information about mask        
         self.mask_name = mask_name              # Name of nifti-file  
         self.mask_index = mask_index            # index relative to MNI
         self.mask_shape = mask_shape            # shape of mask (usually mni)
-        
+        self.mask_threshold = mask_threshold
+
         # Information about condition/class        
         self.class_labels = np.asarray(class_labels)        # class-labels trials 
         self.class_names = np.unique(self.class_labels)
@@ -107,8 +111,8 @@ def extract_class_vector(sub_path, remove_class):
 def create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
                         grouping, norm_method='nothing'):
     """ 
-    Creates subject-specific MVPA matrices, initializes them as an
-    mvpa_mat object and saves them as a cpickle file.
+    Creates subject-specific mvp matrices, initializes them as an
+    mvp_mat object and saves them as a cpickle file.
     
     Args: 
     firstlevel_dir  = directory with individual firstlevel data
@@ -121,15 +125,15 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
                       to be removed (e.g. noise regressors)
    
     Returns:
-    Nothing, but creates a dir ('mvpa_mats') with individual pickle files.
+    Nothing, but creates a dir ('mvp_mats') with individual pickle files.
     
     Lukas Snoek    
     """
     
     data_dir = opj(os.getcwd(), '*%s*' % subject_stem, '*.feat')
     
-    subject_dirs = glob.glob(data_dir)
-    mat_dir = opj(os.getcwd(), 'mvpa_mats')
+    subject_dirs = sorted(glob.glob(data_dir))
+    mat_dir = opj(os.getcwd(), 'mvp_mats')
     
     if os.path.exists(mat_dir):
         shutil.rmtree(mat_dir)
@@ -169,11 +173,11 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
             for match in matches:
                 for k, lab in enumerate(class_labels):
                     if match == lab:
-                        num_labels[k] = i+1
+                        num_labels[k] = i + 1
                         
         sub_name = os.path.basename(os.path.dirname(sub_path))
         
-        print 'Processing ' + sub_name + ' ... ',
+        print 'Processing ' + os.path.basename(sub_path) + ' ... ',
         
         # Generate and sort paths to stat files (COPEs/tstats)
         reg_dir = opj(sub_path, 'reg_standard')
@@ -198,23 +202,23 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
             'Check whether there is a reg_standard directory!' % os.getcwd())
         
         # Pre-allocate
-        mvpa_data = np.zeros([n_stat, n_features])
+        mvp_data = np.zeros([n_stat, n_features])
 
         # Load in data (COPEs)
         for i, path in enumerate(stat_paths):
             cope = nib.load(path).get_data()
-            mvpa_data[i,:] = np.ravel(cope)[mask_index]
+            mvp_data[i,:] = np.ravel(cope)[mask_index]
 
         ''' NORMALIZATION OF VOXEL PATTERNS '''
         if norm_method == 'univariate':
             varcopes = glob.glob(opj(sub_path,'reg_standard','varcope*.nii.gz'))
             varcopes = sort_stat_list(varcopes)
-            removed = [varcopes.pop(idx) for idx in sorted(remove_idx, reverse=True)] 
+            [varcopes.pop(idx) for idx in sorted(remove_idx, reverse=True)]
             
             for i_trial, varcope in enumerate(varcopes):
                 var = nib.load(varcope).get_data()
                 var_sq = np.sqrt(var.ravel()[mask_index])
-                mvpa_data[i_trial,] = mvpa_data[i_trial,] / var_sq
+                mvp_data[i_trial,] = mvp_data[i_trial,] / var_sq
            
         if norm_method == 'multivariate':
             res4d = nib.load(sub_path + '/stats_new/res4d_mni.nii.gz').get_data()
@@ -222,30 +226,40 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
             res4d = res4d[mask_index,]            
         
             if sum(mask_index) > 10000:
-                raise ValueError('Mask probably too large to calculate covariance matrix')
+                msg = 'Mask probably too large to calculate covariance matrix'
+                raise ValueError(msg)
             #res_cov = np.cov(res4d)
         
-        mvpa_data[np.isnan(mvpa_data)] = 0
-        mvpa_data = preproc.scale(mvpa_data)
+        mvp_data[np.isnan(mvp_data)] = 0
+        mvp_data = preproc.scale(mvp_data)
         
-        # Initializing mvpa_mat object, which will be saved as a pickle file
-        to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, 
-                           mask_shape, class_labels, num_labels, grouping)
+        # Initializing mvp_mat object, which will be saved as a pickle file
+        to_save = MVPHeader(mvp_data, sub_name, mask_name, mask_index,
+                           mask_shape, mask_threshold, class_labels,
+                            num_labels, grouping)
 
         if n_feat > 1:
-            filename = opj(mat_dir, '%s_header_run1.cPickle' % sub_name)
+            fn_header = opj(mat_dir, '%s_header_run1.cPickle' % sub_name)
+            fn_data = opj(mat_dir, '%s_data_run1.hdf5' % sub_name)
         else:
-            filename = opj(mat_dir, '%s_header.cPickle' % sub_name)
-        
-        if os.path.exists(filename):        
-            filename = opj(mat_dir, '%s_header_run2.cPickle' % (sub_name))
-        
-        with open(filename, 'wb') as handle:
+            fn_header = opj(mat_dir, '%s_header.cPickle' % sub_name)
+            fn_data = opj(mat_dir, '%s_data.hdf5' % sub_name)
+
+        if os.path.exists(fn_header):
+            fn_header = opj(mat_dir, '%s_header_run2.cPickle' % (sub_name))
+            fn_data = opj(mat_dir, '%s_data_run2.hdf5' % sub_name)
+
+        with open(fn_header, 'wb') as handle:
             cPickle.dump(to_save, handle)
-    
+
+        h5f = h5py.File(fn_data, 'w')
+        h5f.create_dataset('data', data=mvp_data)
+        h5f.close()
+
         print 'done.'
 
-    print 'Created %i MVPA matrices' %  len(glob.glob(opj(mat_dir,'*.cPickle')))
+    print 'Created %i mvp objects' %  len(glob.glob(opj(mat_dir,'*.cPickle')))
+
 
 def sort_stat_list(stat_list):
     """
@@ -259,51 +273,67 @@ def sort_stat_list(stat_list):
         num = [str(s) for s in str(os.path.basename(path)) if s.isdigit()]
         num_list.append(int(''.join(num)))
     
-    sorted_list = [x for y,x in sorted(zip(num_list, stat_list))]
+    sorted_list = [x for y, x in sorted(zip(num_list, stat_list))]
     return(sorted_list)
-    
+
+
 def merge_runs():
     '''
-    Merges mvpa_mat objects from multiple runs. 
+    Merges mvp_mat objects from multiple runs. 
     Incomplete; assumes only two runs for now.
     '''
     
-    sub_paths = glob.glob(opj(os.getcwd(),'mvpa_mats','*cPickle*'))
-    sub_paths = zip(sub_paths[::2], sub_paths[1::2])    
-    
+    header_paths = sorted(glob.glob(opj(os.getcwd(),'mvp_mats','*cPickle*')))
+    header_paths = zip(header_paths[::2], header_paths[1::2])
+
+    data_paths = sorted(glob.glob(opj(os.getcwd(),'mvp_mats','*hdf5*')))
+    data_paths = zip(data_paths[::2], data_paths[1::2])
+
+    sub_paths = zip(header_paths, data_paths)
     n_sub = len(sub_paths)
     
-    for files in sub_paths:
-        run1 = cPickle.load(open(files[0]))
-        run2 = cPickle.load(open(files[1]))
+    for header, data in sub_paths:
+        run1_h = cPickle.load(open(header[0]))
+        run2_h = cPickle.load(open(header[1]))
+
+        run1_d = h5py.File(data[0],'r')
+        run2_d = h5py.File(data[1],'r')
+
+        merged_grouping = run1_h.grouping
+        merged_mask_index = run1_h.mask_index
+        merged_mask_shape = run1_h.mask_shape
+        merged_mask_name = run1_h.mask_name
+        merged_mask_threshold = run1_h.mask_threshold
+        merged_name = run1_h.subject_name
         
-        merged_grouping = run1.grouping
-        merged_mask_index = run1.mask_index 
-        merged_mask_shape = run1.mask_shape
-        merged_mask_name = run1.mask_name
-        merged_name = run1.subject_name      
+        merged_data = np.empty((run1_d['data'].shape[0] +
+                                run2_d['data'].shape[0],
+                                run1_d['data'].shape[1]))
+
+        merged_data[::2,:] = run1_d['data'][:]
+        merged_data[1::2,:] = run2_d['data'][:]
         
-        merged_data = np.empty((run1.data.shape[0] + run2.data.shape[0], run1.data.shape[1]))
-        merged_data[::2,:] = run1.data
-        merged_data[1::2,:] = run2.data
-        
-        merged_class_labels = list(chain.from_iterable(izip(run1.class_labels,run2.class_labels)))        
-        merged_num_labels = list(chain.from_iterable(izip(run1.num_labels,run2.num_labels)))
-     
-        class_idx = []
-        trial_idx = []
-        for i in xrange(run1.n_class):
-            to_append = list(chain.from_iterable(izip(run1.class_idx[i],run2.class_idx[i])))
-            class_idx.append(to_append)
-            
-            #to_append = list(chain.from_iterable(izip(run1.trial_idx[i],run2.trial_idx[i]+len(class_idx)+20+1)))
-            #trial_idx.append(to_append)
+        merged_class_labels = list(chain.from_iterable(izip(run1_h.class_labels,
+                                                            run2_h.class_labels)))
+
+        merged_num_labels = list(chain.from_iterable(izip(run1_h.num_labels,
+                                                          run2_h.num_labels)))
                   
-        to_save = mvpa_mat(merged_data, merged_name, merged_mask_name, 
-                           merged_mask_index, merged_mask_shape, merged_class_labels, 
-                           merged_num_labels, merged_grouping)
-        
-        with open(opj(os.getcwd(),'mvpa_mats',merged_name + '_merged.cPickle'), 'wb') as handle:
+        to_save = MVPHeader(merged_data, merged_name, merged_mask_name,
+                            merged_mask_index, merged_mask_shape,
+                            merged_mask_threshold, merged_class_labels,
+                            merged_num_labels, merged_grouping)
+
+        fn = opj(os.getcwd(), 'mvp_mats', merged_name + '_header_merged.cPickle')
+        with open(fn, 'wb') as handle:
             cPickle.dump(to_save, handle)
-            
+
+        fn = opj(os.getcwd(), 'mvp_mats', merged_name + '_data_merged.hdf5')
+        h5f = h5py.File(fn, 'w')
+        h5f.create_dataset('data', data=merged_data)
+        h5f.close()
+
         print "Merged subject %s " % merged_name
+
+    os.system('rm %s' % opj(os.getcwd(), 'mvp_mats','*run*'))
+

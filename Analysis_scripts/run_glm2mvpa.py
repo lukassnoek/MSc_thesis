@@ -8,21 +8,22 @@ Created on Mon Aug 10 17:36:06 2015
 ################################ SETUP dirs ################################
 import sys
 import os
+from os.path import join as opj
 
 home = os.path.expanduser("~")
-script_dir = os.path.join(home,'LOCAL','Analysis_scripts')
+script_dir = opj(home,'LOCAL','Analysis_scripts')
 sys.path.append(script_dir)    
-ROI_dir = os.path.join(home,'ROIs')
+ROI_dir = opj(home,'ROIs')
 
 ################################ SETUP params ################################
 from modules.glm2mvpa import create_subject_mats, merge_runs
 
-GM_mask = os.path.join(ROI_dir, 'GrayMatter.nii.gz')
-OFC_mask = os.path.join(ROI_dir, 'OrbitofrontalCortex.nii.gz')
-FL_mask = os.path.join(ROI_dir,'FrontalLobe.nii.gz')
-MNI_mask = os.path.join(ROI_dir, 'MNI152_T1_2mm_brain.nii.gz')
+GM_mask = opj(ROI_dir, 'GrayMatter.nii.gz')
+OFC_mask = opj(ROI_dir, 'OrbitofrontalCortex.nii.gz')
+FL_mask = opj(ROI_dir, 'FrontalLobe.nii.gz')
+MNI_mask = opj(ROI_dir, 'MNI152_T1_2mm_brain.nii.gz')
 
-feat_dir = os.path.join(home,'DecodingEmotions')
+feat_dir = opj(home, 'DecodingEmotions')
 os.chdir(feat_dir)
 
 mask = GM_mask
