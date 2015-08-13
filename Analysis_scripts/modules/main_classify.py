@@ -8,6 +8,8 @@ To do:
 Lukas Snoek
 """
 
+_author_ = "Lukas Snoek"
+
 import glob
 import os
 import numpy as np
@@ -16,11 +18,9 @@ import cPickle
 import nibabel as nib
 
 from sklearn import svm
-from sklearn.lda import LDA
 
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
-from sklearn.cluster import DBSCAN
 
 def draw_random_subsample(mvpa, n_test):
     ''' 
@@ -42,7 +42,8 @@ def draw_random_subsample(mvpa, n_test):
         ind = np.random.choice(mvpa.trial_idx[c], n_test, replace=False)            
         test_ind[ind] = 1
     return test_ind.astype(bool)
-    
+
+
 def select_voxels(mvpa, train_idx, zval, method):
     ''' 
     Feature selection based on univariate differences between
@@ -88,7 +89,7 @@ def select_voxels(mvpa, train_idx, zval, method):
     
     return(feat_idx, diff_vec)
 
-def mvpa_classify(identifier, iterations, n_test, zval, method):
+def mvpa_classify(identifier, mask_file, iterations, n_test, zval, method):
     '''
     Main classification function that classifies subject-specific
     mvpa_mat objects according to their classes (specified in .num_labels).
@@ -102,9 +103,9 @@ def mvpa_classify(identifier, iterations, n_test, zval, method):
         method (str): method to determine univariate differences between mean
                       patterns across classes.
     '''
-    
-    subject_dirs = glob.glob(os.path.join(os.getcwd(),'mvpa_mats','*%s*cPickle' % identifier))      
-    
+
+    subject_dirs = glob.glob(os.path.join(os.getcwd(),'mvpa_mats','*%s*cPickle' % identifier))
+
     # We need to load the first sub to extract some info
     print "Processing file %s..." % os.path.basename(subject_dirs[0])
     mvpa = cPickle.load(open(subject_dirs[0]))
@@ -116,7 +117,15 @@ def mvpa_classify(identifier, iterations, n_test, zval, method):
         if sub_dir is not subject_dirs[0]:
             print "Processing file %s..." % os.path.basename(sub_dir)
             mvpa = cPickle.load(open(sub_dir))
-    
+
+        mask_data = np.reshape(nib.load(mask_file).get_data() > 10, mvpa.mask_index.shape)
+        new_idx = ((mask_data.astype(int) + mvpa.mask_index.astype(int))==2)[mvpa.mask_index]
+
+        mvpa.mask_name = os.path.basename(mask_file)[:-7]
+        mvpa.mask_index = new_idx
+        mvpa.data = mvpa.data[:,new_idx]
+        mvpa.n_features = np.sum(new_idx)
+
         score = []
         for i in xrange(iterations):
             test_idx = draw_random_subsample(mvpa, n_test)

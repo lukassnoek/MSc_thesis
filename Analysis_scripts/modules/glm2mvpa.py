@@ -17,7 +17,7 @@ with a multivariate normalization technique in the future
 Lukas Snoek, master thesis Dynamic Affect, 2015
 """
 
-_author_ = "Lukas"
+_author_ = "Lukas Snoek"
 
 import os
 import numpy as np
@@ -30,8 +30,10 @@ import fnmatch
 from itertools import chain, izip
 import shutil
 
-class mvpa_mat():
-    '''MVPA matrix of trials by features'''
+
+class mvpa_mat:
+    """MVPA matrix of trials by features"""
+
     def __init__(self, data, subject_name, mask_name, mask_index, mask_shape, 
                  class_labels, num_labels, grouping):
         
@@ -50,12 +52,10 @@ class mvpa_mat():
         self.class_labels = np.asarray(class_labels)        # class-labels trials 
         self.class_names = np.unique(self.class_labels)
         self.n_class = len(np.unique(num_labels)) 
-        self.n_inst = [np.sum(cls == num_labels) \
-                       for cls in np.unique(num_labels)]
+        self.n_inst = [np.sum(cls == num_labels) for cls in np.unique(num_labels)]
                   
         self.class_idx = [num_labels == cls for cls in np.unique(num_labels)]
-        self.trial_idx = [np.where(num_labels == cls)[0] \
-                          for cls in np.unique(num_labels)]
+        self.trial_idx = [np.where(num_labels == cls)[0] for cls in np.unique(num_labels)]
                               
         self.num_labels = num_labels
         self.grouping = grouping
@@ -63,11 +63,12 @@ class mvpa_mat():
     def normalize(self, style):
         pass
 
+
 def extract_class_vector(sub_path, remove_class):
     """ Extracts class of each trial and returns a vector of class labels."""
     
     sub_name = os.path.basename(os.path.normpath(sub_path))
-    to_parse = os.path.join(sub_path,'design.con')
+    to_parse = os.path.join(sub_path, 'design.con')
     
     # Read in design.con
     if os.path.isfile(to_parse):
@@ -85,22 +86,23 @@ def extract_class_vector(sub_path, remove_class):
         # Remove classes/trials based on remove_class list
         remove_idx = []
         for match in remove_class:
-            to_remove = fnmatch.filter(class_labels,'*%s*' % (match))
+            to_remove = fnmatch.filter(class_labels, '*%s*' % match)
             
             for name in to_remove:
                 remove_idx.append(class_labels.index(name))
         
         remove_idx = list(set(remove_idx))
-        removed = [class_labels.pop(idx) for idx in sorted(remove_idx, reverse=True)]
+        [class_labels.pop(idx) for idx in sorted(remove_idx, reverse=True)]
 
         class_labels = [s.split('_')[0] for s in class_labels]
     
-        return(class_labels, remove_idx)
+        return class_labels, remove_idx
                     
     else:
         print('There is no design.con file for ' + sub_name)
-    
-def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, grouping = [], norm_method = 'nothing'):
+
+
+def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, grouping, norm_method='nothing'):
     """ 
     Creates subject-specific MVPA matrices, initializes them as an
     mvpa_mat object and saves them as a cpickle file.
@@ -121,10 +123,10 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
     Lukas Snoek    
     """
     
-    data_dir = os.path.join(os.getcwd(), '*%s*' % (subject_stem),'*.feat') 
+    data_dir = os.path.join(os.getcwd(), '*%s*' % subject_stem, '*.feat')
     
     subject_dirs = glob.glob(data_dir)
-    mat_dir = os.path.join(os.getcwd(),'mvpa_mats')
+    mat_dir = os.path.join(os.getcwd(), 'mvpa_mats')
     
     if os.path.exists(mat_dir):
         shutil.rmtree(mat_dir)
@@ -148,19 +150,19 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
             grouping = np.unique(class_labels)
             
         num_labels = np.zeros(len(class_labels))
-        for i,group in enumerate(grouping):
+        for i, group in enumerate(grouping):
             
             if type(group) == list:
                 matches = []
                 for g in group:
-                    matches.append(fnmatch.filter(class_labels,'*%s*' % (g)))
-                matches = [ x for y in matches for x in y]
+                    matches.append(fnmatch.filter(class_labels, '*%s*' % g))
+                matches = [x for y in matches for x in y]
             else:
-                matches = fnmatch.filter(class_labels,'*%s*' % (group))
+                matches = fnmatch.filter(class_labels, '*%s*' % group)
                 matches = list(set(matches))
 
             for match in matches:
-                for k,lab in enumerate(class_labels):
+                for k, lab in enumerate(class_labels):
                     if match == lab:
                         num_labels[k] = i+1
                         
@@ -170,19 +172,18 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
         
         # Generate and sort paths to stat files (COPEs/tstats)
         if norm_method == 'nothing':
-            stat_paths = glob.glob(os.path.join(sub_path,'reg_standard','tstat*.nii.gz'))
+            stat_paths = glob.glob(os.path.join(sub_path, 'reg_standard', 'tstat*.nii.gz'))
         else:
-            stat_paths = glob.glob(os.path.join(sub_path,'reg_standard','cope*.nii.gz'))
+            stat_paths = glob.glob(os.path.join(sub_path, 'reg_standard', 'cope*.nii.gz'))
         
         stat_paths = sort_stat_list(stat_paths) # see function below
         
         # Remove trials that shouldn't be analyzed (based on remove_class)
-        removed = [stat_paths.pop(idx) for idx in sorted(remove_idx, reverse=True)]        
+        [stat_paths.pop(idx) for idx in sorted(remove_idx, reverse=True)]
         n_stat = len(stat_paths)
 
         if not n_stat == len(class_labels):
-            raise ValueError('The number of trials do not match the number ' \
-                             'of class labels')
+            raise ValueError('The number of trials do not match the number of class labels')
 
         if n_stat == 0: 
             raise ValueError('There are no valid COPES/tstats in %s. ' \
@@ -197,9 +198,6 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
             mvpa_data[i,:] = np.ravel(cope)[mask_index]
 
         ''' NORMALIZATION OF VOXEL PATTERNS '''
-        if norm_method == 'nothing':
-            pass
-        
         if norm_method == 'univariate':
             varcopes = glob.glob(os.path.join(sub_path,'reg_standard','varcope*.nii.gz'))
             varcopes = sort_stat_list(varcopes)
@@ -224,9 +222,9 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
         
         # Initializing mvpa_mat object, which will be saved as a pickle file
         to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, 
-                           mask_shape, class_labels, num_labels, grouping) 
+                           mask_shape, class_labels, num_labels, grouping)
+
         filename = os.path.join(mat_dir, '%s_run1.cPickle' % (sub_name))
-        
         
         if os.path.exists(filename):        
             filename = os.path.join(mat_dir, '%s_run2.cPickle' % (sub_name))
@@ -235,7 +233,8 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
             cPickle.dump(to_save, handle)
     
         print 'done.'
-    print 'Created %i MVPA matrices' %  len(glob.glob(mat_dir + '/*.cPickle'))
+
+    print 'Created %i MVPA matrices' %  len(glob.glob(os.path.join(mat_dir,'*.cPickle')))
 
 def sort_stat_list(stat_list):
     """
