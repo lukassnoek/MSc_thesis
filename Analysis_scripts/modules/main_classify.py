@@ -141,8 +141,13 @@ def mvpa_classify(identifier, mask_file, iterations, n_test, zval, method):
             
             out[out < zval] = 0            
             img = nib.Nifti1Image(out, np.eye(4))
-            nib.save(img, os.path.join(os.path.expanduser('~'),'voxel_selection.nii.gz'))            
-            
+            file_name = os.path.join(os.getcwd(),'voxel_selection.nii.gz')
+            nib.save(img, file_name)
+
+            #os.system('cluster -i %s -o clustered -t %f -osize=cluster_size > cluster_info' %
+            #         (file_name, zval))
+
+
             if np.sum(feat_idx) == 0:
                  raise ValueError('Z-threshold too high! No voxels selected ' \
                  + 'at iteration ' + str(i) + ' for ' + mvpa.subject_name)
