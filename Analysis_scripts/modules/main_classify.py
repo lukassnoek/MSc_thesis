@@ -118,6 +118,7 @@ def mvpa_classify(identifier, mask_file, iterations, n_test, zval, method):
             print "Processing file %s..." % os.path.basename(sub_dir)
             mvpa = cPickle.load(open(sub_dir))
 
+        # Re-indexing with ROI
         mask_data = np.reshape(nib.load(mask_file).get_data() > 10, mvpa.mask_index.shape)
         new_idx = ((mask_data.astype(int) + mvpa.mask_index.astype(int))==2)[mvpa.mask_index]
 
