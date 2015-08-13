@@ -17,7 +17,7 @@ with a multivariate normalization technique in the future
 Lukas Snoek, master thesis Dynamic Affect, 2015
 """
 
-_author_ = "Lukas Snoek"
+__author__ = "Lukas Snoek"
 
 import os
 import numpy as np
@@ -25,10 +25,12 @@ import nibabel as nib
 import glob
 import csv
 import cPickle
-from sklearn import preprocessing as preproc
 import fnmatch
-from itertools import chain, izip
 import shutil
+
+from os.path import join as opj
+from sklearn import preprocessing as preproc
+from itertools import chain, izip
 
 
 class mvpa_mat:
@@ -36,7 +38,7 @@ class mvpa_mat:
 
     def __init__(self, data, subject_name, mask_name, mask_index, mask_shape, 
                  class_labels, num_labels, grouping):
-        
+
         # Primary data      
         self.data = data                        # data (features * trials)
         self.subject_name = subject_name        # subject name
@@ -68,7 +70,7 @@ def extract_class_vector(sub_path, remove_class):
     """ Extracts class of each trial and returns a vector of class labels."""
     
     sub_name = os.path.basename(os.path.normpath(sub_path))
-    to_parse = os.path.join(sub_path, 'design.con')
+    to_parse = opj(sub_path, 'design.con')
     
     # Read in design.con
     if os.path.isfile(to_parse):
@@ -102,7 +104,8 @@ def extract_class_vector(sub_path, remove_class):
         print('There is no design.con file for ' + sub_name)
 
 
-def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, grouping, norm_method='nothing'):
+def create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
+                        grouping, norm_method='nothing'):
     """ 
     Creates subject-specific MVPA matrices, initializes them as an
     mvpa_mat object and saves them as a cpickle file.
@@ -123,10 +126,10 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
     Lukas Snoek    
     """
     
-    data_dir = os.path.join(os.getcwd(), '*%s*' % subject_stem, '*.feat')
+    data_dir = opj(os.getcwd(), '*%s*' % subject_stem, '*.feat')
     
     subject_dirs = glob.glob(data_dir)
-    mat_dir = os.path.join(os.getcwd(), 'mvpa_mats')
+    mat_dir = opj(os.getcwd(), 'mvpa_mats')
     
     if os.path.exists(mat_dir):
         shutil.rmtree(mat_dir)
@@ -141,7 +144,9 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
     n_features = np.sum(mask_index)    
     
     for sub_path in subject_dirs:
-        
+
+        n_feat = len(glob.glob(os.path.dirname(sub_path) + '/*.feat'))
+
         # Extract class vector (see definition below)
         class_labels, remove_idx = extract_class_vector(sub_path, remove_class)
         
@@ -171,10 +176,12 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
         print 'Processing ' + sub_name + ' ... ',
         
         # Generate and sort paths to stat files (COPEs/tstats)
+        reg_dir = opj(sub_path, 'reg_standard')
+
         if norm_method == 'nothing':
-            stat_paths = glob.glob(os.path.join(sub_path, 'reg_standard', 'tstat*.nii.gz'))
+            stat_paths = glob.glob(opj(reg_dir, 'tstat*.nii.gz'))
         else:
-            stat_paths = glob.glob(os.path.join(sub_path, 'reg_standard', 'cope*.nii.gz'))
+            stat_paths = glob.glob(opj(reg_dir, 'cope*.nii.gz'))
         
         stat_paths = sort_stat_list(stat_paths) # see function below
         
@@ -183,14 +190,15 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
         n_stat = len(stat_paths)
 
         if not n_stat == len(class_labels):
-            raise ValueError('The number of trials do not match the number of class labels')
+            msg = 'The number of trials do not match the number of class labels'
+            raise ValueError(msg)
 
         if n_stat == 0: 
             raise ValueError('There are no valid COPES/tstats in %s. ' \
-            'Check whether there is a reg_standard directory!' % (os.getcwd()))
+            'Check whether there is a reg_standard directory!' % os.getcwd())
         
         # Pre-allocate
-        mvpa_data = np.zeros([n_stat,n_features])
+        mvpa_data = np.zeros([n_stat, n_features])
 
         # Load in data (COPEs)
         for i, path in enumerate(stat_paths):
@@ -199,7 +207,7 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
 
         ''' NORMALIZATION OF VOXEL PATTERNS '''
         if norm_method == 'univariate':
-            varcopes = glob.glob(os.path.join(sub_path,'reg_standard','varcope*.nii.gz'))
+            varcopes = glob.glob(opj(sub_path,'reg_standard','varcope*.nii.gz'))
             varcopes = sort_stat_list(varcopes)
             removed = [varcopes.pop(idx) for idx in sorted(remove_idx, reverse=True)] 
             
@@ -224,17 +232,20 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class, groupi
         to_save = mvpa_mat(mvpa_data, sub_name, mask_name, mask_index, 
                            mask_shape, class_labels, num_labels, grouping)
 
-        filename = os.path.join(mat_dir, '%s_run1.cPickle' % (sub_name))
+        if n_feat > 1:
+            filename = opj(mat_dir, '%s_header_run1.cPickle' % sub_name)
+        else:
+            filename = opj(mat_dir, '%s_header.cPickle' % sub_name)
         
         if os.path.exists(filename):        
-            filename = os.path.join(mat_dir, '%s_run2.cPickle' % (sub_name))
+            filename = opj(mat_dir, '%s_header_run2.cPickle' % (sub_name))
         
         with open(filename, 'wb') as handle:
             cPickle.dump(to_save, handle)
     
         print 'done.'
 
-    print 'Created %i MVPA matrices' %  len(glob.glob(os.path.join(mat_dir,'*.cPickle')))
+    print 'Created %i MVPA matrices' %  len(glob.glob(opj(mat_dir,'*.cPickle')))
 
 def sort_stat_list(stat_list):
     """
@@ -257,7 +268,7 @@ def merge_runs():
     Incomplete; assumes only two runs for now.
     '''
     
-    sub_paths = glob.glob(os.path.join(os.getcwd(),'mvpa_mats','*cPickle*'))
+    sub_paths = glob.glob(opj(os.getcwd(),'mvpa_mats','*cPickle*'))
     sub_paths = zip(sub_paths[::2], sub_paths[1::2])    
     
     n_sub = len(sub_paths)
@@ -292,7 +303,7 @@ def merge_runs():
                            merged_mask_index, merged_mask_shape, merged_class_labels, 
                            merged_num_labels, merged_grouping)
         
-        with open(os.path.join(os.getcwd(),'mvpa_mats',merged_name + '_merged.cPickle'), 'wb') as handle:
+        with open(opj(os.getcwd(),'mvpa_mats',merged_name + '_merged.cPickle'), 'wb') as handle:
             cPickle.dump(to_save, handle)
             
         print "Merged subject %s " % merged_name

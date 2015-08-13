@@ -38,3 +38,5 @@
 Stimulus_delivery/log/*
 *.jpg
 *.JPG
+
+.idea
