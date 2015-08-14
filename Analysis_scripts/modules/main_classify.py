@@ -106,34 +106,38 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, method):
                       patterns across classes.
     """
 
+    clf = svm.LinearSVC()
+
     header_path, data_path = sub_dir
 
     mvp = cPickle.load(open(header_path))
     h5f = h5py.File(data_path, 'r')
-    mvp.data = h5f['data'][:]
+    gm_data = h5f['data'][:]
+
+    out_score = []
+    out_mask = []
 
     # Re-indexing with ROI
-    if mask_file:
-        mask_data = nib.load(mask_file).get_data()
+    for roi in mask_file:
+        mask_data = nib.load(roi).get_data()
         mask_data = np.reshape(mask_data > mvp.mask_threshold,
                                mvp.mask_index.shape)
         new_idx = ((mask_data.astype(int) +
                     mvp.mask_index.astype(int)) == 2)[mvp.mask_index]
-        mvp.mask_name = os.path.basename(mask_file)[:-7]
-        mvp.data = mvp.data[:, new_idx]
+        mvp.mask_name = os.path.basename(roi)[:-7]
+        mvp.data = gm_data[:, new_idx]
         mvp.n_features = np.sum(new_idx)
 
+        out_mask.append(mvp.mask_name)
 
-    clf = svm.LinearSVC()
+        score = np.zeros(iterations)
+        for i in xrange(iterations):
 
-    score = np.zeros(iterations)
-    for i in xrange(iterations):
+            test_idx = draw_random_subsample(mvp, n_test)
+            train_idx = np.invert(test_idx)
 
-        test_idx = draw_random_subsample(mvp, n_test)
-        train_idx = np.invert(test_idx)
-
-        feat_idx, diff_vec = select_voxels(mvp, train_idx,
-                                           zval, method='pairwise')
+            feat_idx, diff_vec = select_voxels(mvp, train_idx,
+                                               zval, method='pairwise')
 
         #out = np.zeros(mvp.mask_shape).ravel()
         #out[mvp.mask_index][new_idx] = diff_vec_dd
@@ -147,26 +151,16 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, method):
         # os.system('cluster -i %s -o clustered -t %f -osize=cluster_size > cluster_info' %
         #         (file_name, zval))
 
-        if np.sum(feat_idx) == 0:
-            raise ValueError('Z-threshold too high! No voxels selected ' \
-                             + 'at iteration ' + str(
-                i) + ' for ' + mvp.subject_name)
+            train_data = mvp.data[train_idx, :][:, feat_idx]
+            test_data = mvp.data[test_idx, :][:, feat_idx]
 
-        train_data = mvp.data[train_idx, :][:, feat_idx]
-        test_data = mvp.data[test_idx, :][:, feat_idx]
+            train_labels = np.asarray(mvp.num_labels)[train_idx]
+            test_labels = np.asarray(mvp.num_labels)[test_idx]
 
-        train_labels = np.asarray(mvp.num_labels)[train_idx]
-        test_labels = np.asarray(mvp.num_labels)[test_idx]
-
-        model = clf.fit(train_data, train_labels)
-        score[i] = clf.score(test_data, test_labels)
-
-    print "Done processing subject %s." % mvp.subject_name
-
-    to_open = sorted(glob.glob('*results*'), reverse=True)
-    fid = open(to_open[0], 'w')
-    fid.write('%s \t %f \n' % (mvp.subject_name, np.mean(score)))
-    fid.close()
+            clf.fit(train_data, train_labels)
+            score[i] = clf.score(test_data, test_labels)
+        out_score.append(np.mean(score))
+    return(zip(out_mask,out_score))
 
 '''
         for cls in range(mvp.n_class):
@@ -194,10 +188,7 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, method):
 # return(cm_all, voxels_correct)
 
 
-def create_results_log(iterations, zval, n_test, method, mask_file):
-
-    if not mask_file:
-        mask_file = 'Gray Matter'
+def create_results_log(iterations, zval, n_test, method):
 
     ts = time.time()
     now = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H:%M')

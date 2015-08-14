@@ -22,16 +22,13 @@ ROI_dir = opj(home,'ROIs')
 os.chdir(feat_dir)
 
 ################################ SETUP params ################################
-OFC_mask = opj(ROI_dir, 'OrbitofrontalCortex.nii.gz')
-FL_mask = opj(ROI_dir, 'FrontalLobe.nii.gz')
-
 # Parameters
 identifier = 'merged'
-iterations = 20
+iterations = 5
 n_test = 2
 zval = 2.3
 method = 'fstat'
-mask_file = OFC_mask
+mask_file = glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'bilateral', '*CingulateGyrus*'))
 
 mvp_dir = opj(os.getcwd(), 'mvp_mats')
 header_dirs = sorted(glob.glob(opj(mvp_dir, '*%s*cPickle' % identifier)))
@@ -40,11 +37,12 @@ subject_dirs = zip(header_dirs, data_dirs)
 
 ################################ SETUP multiproc #############################
 
-from modules.main_classify import create_results_log
-create_results_log(iterations, zval, n_test, method, mask_file)
+#from modules.main_classify import create_results_log
+#create_results_log(iterations, zval, n_test, method)
 
 pool = mp.Pool(processes=len(subject_dirs))
 results = [pool.apply_async(mvp_classify, args=(sub_dir, mask_file, iterations,
                             n_test, zval, method)) for sub_dir in subject_dirs]
-
+results = [p.get() for p in results]
+print results
 #mvp_classify(identifier, mask_file, iterations, n_test, zval, method)
