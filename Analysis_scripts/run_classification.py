@@ -25,19 +25,20 @@ script_dir = os.path.join(home, 'LOCAL', 'Analysis_scripts')
 sys.path.append(script_dir)    
 
 from modules.main_classify import mvp_classify
-feat_dir = os.path.join(home, 'DecodingEmotions')
+feat_dir = opj(home, 'DynamicAffect_MV/FSL_FirstLevel_Posttest')
 ROI_dir = opj(home, 'ROIs')
 
 os.chdir(feat_dir)
 
 ################################ SETUP params ################################
 # Parameters
-identifier = 'merged'
-iterations = 500
-n_test = 2
-zval = 2.3
+identifier = ''
+iterations = 100
+n_test = 1
+zval = 1.5
 vs_method = 'fstat'
-mask_file = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'bilateral', '*nii.gz*')))
+mask_file = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'bilateral', '*.nii.gz')))
+# alleen GM
 
 mvp_dir = opj(os.getcwd(), 'mvp_mats')
 header_dirs = sorted(glob.glob(opj(mvp_dir, '*%s*cPickle' % identifier)))

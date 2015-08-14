@@ -89,7 +89,7 @@ def select_voxels(mvp, train_idx, zval, vs_method):
         diff_vec = diff_patterns
         feat_idx = diff_vec > zval
 
-    return (feat_idx, diff_vec)
+    return (np.squeeze(feat_idx), diff_vec)
 
 
 def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, vs_method):
@@ -128,6 +128,10 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, vs_method):
         mvp.data = gm_data[:, new_idx]
         mvp.n_features = np.sum(new_idx)
 
+        #res4d = nib.load(sub_path + '/stats_new/res4d_mni.nii.gz').get_data()
+        #res4d.resize([np.prod(res4d.shape[0:3]), res4d.shape[3]])
+        #res4d = res4d[mask_index,]
+
         print "Processing %s for subject %s" % (mvp.mask_name, mvp.subject_name)
 
         score = np.zeros(iterations)
@@ -137,7 +141,7 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, vs_method):
             train_idx = np.invert(test_idx)
 
             feat_idx, diff_vec = select_voxels(mvp, train_idx,
-                                               zval, vs_method='pairwise')
+                                               zval, vs_method=vs_method)
 
         #out = np.zeros(mvp.mask_shape).ravel()
         #out[mvp.mask_index][new_idx] = diff_vec_dd
@@ -219,7 +223,7 @@ def maxpred2cm(maxpred, n_sub, mvp):
                 cm_all[c, row, col] = np.sum(
                     maxpred[c, mvp.class_idx[row]] == col + 1)
 
-                # Normalize
+        # Normalize
         cm_all[c, :, :] = cm_all[c, :, :] / np.sum(cm_all[c, :, :], axis=0)
 
     return (cm_all)
