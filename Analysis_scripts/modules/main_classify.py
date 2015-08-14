@@ -16,6 +16,7 @@ import nibabel as nib
 import h5py
 import datetime
 import time
+import pandas as pd
 from sklearn import svm
 from os.path import join as opj
 
@@ -24,17 +25,17 @@ from matplotlib import pyplot as plt
 
 
 def draw_random_subsample(mvp, n_test):
-    ''' 
+    """
     Draws random subsample of test trials for each class.
     Assumes the mvp_mat() object as input.
-    
+
     Args:
         mvp (mvp_mat): instance of mvp_mat (see glm2mvp module)
         n_test (int): the number of test-trial to be drawn PER CLASS
-    
+
     Returns:
         test_ind (bool): boolean vector of len(mvp.n_trials)
-    '''
+    """
 
     test_ind = np.zeros(len(mvp.num_labels), dtype=np.int)
 
@@ -44,7 +45,7 @@ def draw_random_subsample(mvp, n_test):
     return test_ind.astype(bool)
 
 
-def select_voxels(mvp, train_idx, zval, method):
+def select_voxels(mvp, train_idx, zval, vs_method):
     ''' 
     Feature selection based on univariate differences between
     patterns averaged across trials from the same class. 
@@ -78,10 +79,10 @@ def select_voxels(mvp, train_idx, zval, method):
         x = av_patterns[cb[0] - 1] - av_patterns[cb[1] - 1, :]
         diff_patterns[i,] = np.abs((x - x.mean()) / x.std())
 
-    if diff_patterns.shape[0] > 1 and method == 'fstat':
+    if diff_patterns.shape[0] > 1 and vs_method == 'fstat':
         diff_vec = np.mean(diff_patterns, axis=0)
         feat_idx = diff_vec > zval
-    elif diff_patterns.shape[0] > 1 and method == 'pairwise':
+    elif diff_patterns.shape[0] > 1 and vs_method == 'pairwise':
         diff_vec = np.mean(diff_patterns, axis=0)
         feat_idx = np.sum(diff_patterns > zval, axis=0) > 0
     else:
@@ -91,7 +92,7 @@ def select_voxels(mvp, train_idx, zval, method):
     return (feat_idx, diff_vec)
 
 
-def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, method):
+def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, vs_method):
     """
     Main classification function that classifies subject-specific
     mvp_mat objects according to their classes (specified in .num_labels).
@@ -114,8 +115,7 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, method):
     h5f = h5py.File(data_path, 'r')
     gm_data = h5f['data'][:]
 
-    out_score = []
-    out_mask = []
+    df_list = []
 
     # Re-indexing with ROI
     for roi in mask_file:
@@ -128,7 +128,7 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, method):
         mvp.data = gm_data[:, new_idx]
         mvp.n_features = np.sum(new_idx)
 
-        out_mask.append(mvp.mask_name)
+        print "Processing %s for subject %s" % (mvp.mask_name, mvp.subject_name)
 
         score = np.zeros(iterations)
         for i in xrange(iterations):
@@ -137,7 +137,7 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, method):
             train_idx = np.invert(test_idx)
 
             feat_idx, diff_vec = select_voxels(mvp, train_idx,
-                                               zval, method='pairwise')
+                                               zval, vs_method='pairwise')
 
         #out = np.zeros(mvp.mask_shape).ravel()
         #out[mvp.mask_index][new_idx] = diff_vec_dd
@@ -159,8 +159,15 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, method):
 
             clf.fit(train_data, train_labels)
             score[i] = clf.score(test_data, test_labels)
-        out_score.append(np.mean(score))
-    return(zip(out_mask,out_score))
+
+        df = {'sub_name': mvp.subject_name,
+              'mask': mvp.mask_name,
+              'score': np.mean(score)}
+        df = pd.DataFrame(df, index=[1])
+
+        df_list.append(df)
+
+    return(pd.concat(df_list))
 
 '''
         for cls in range(mvp.n_class):
@@ -188,36 +195,20 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, zval, method):
 # return(cm_all, voxels_correct)
 
 
-def create_results_log(iterations, zval, n_test, method):
+def create_results_log(iterations, zval, n_test, vs_method):
 
     ts = time.time()
     now = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d_%H:%M')
-    logname = 'results_%s' % now
 
-    fid = open(logname, 'w')
-    fid.write('Results classification run with the following parameters \n \n')
-    fid.write('ROI mask: \t %s \n' % mask_file)
-    fid.write('Iterations: \t %s \n' % iterations)
-    fid.write('Z-value: \t %s \n' % zval)
-    fid.write('N-test: \t %s \n' % n_test)
-    fid.write('Method: \t %s \n \n' % method)
+    fid = open('results_summary', 'w')
+    fid.write('## Results classification run with the following parameters \n \n')
+    fid.write('# Iterations: \t %s \n' % iterations)
+    fid.write('# Z-value: \t %s \n' % zval)
+    fid.write('# N-test: \t %s \n' % n_test)
+    fid.write('# Method: \t %s \n \n' % vs_method)
 
-    fid.write('Subject_name \t Mean score \n')
+    fid.write('# Mask_name \t \t Mean score \n')
     fid.close()
-
-def plot_confusion_matrix(cm, mvp, title='Confusion matrix', cmap=plt.cm.Reds):
-    ''' Code from sklearn's example at http://scikit-learn.org/stable/
-    auto_examples/model_selection/plot_confusion_matrix.html '''
-
-    plt.imshow(cm, interpolation='nearest', cmap=cmap)
-    plt.title(title)
-    plt.colorbar()
-    tick_marks = np.arange(len(mvp.class_names))
-    plt.xticks(tick_marks, [x[0:3] for x in mvp.class_names], rotation=45)
-    plt.yticks(tick_marks, [x[0:3] for x in mvp.class_names])
-    plt.tight_layout()
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
 
 
 def maxpred2cm(maxpred, n_sub, mvp):
