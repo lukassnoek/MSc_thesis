@@ -33,7 +33,7 @@ import sys
 from os.path import join as opj
 from sklearn import preprocessing as preproc
 from itertools import chain, izip
-
+import nipype.interfaces.fsl as fsl
 
 class MVPHeader:
     """
@@ -50,41 +50,43 @@ class MVPHeader:
         self.n_trials = data.shape[0]
 
         # Information about mask        
-        self.mask_name = mask_name              # Name of nifti-file  
+        self.mask_name = mask_name              # Name of nifti-file
+        self.submask_name = None
         self.mask_index = mask_index            # index relative to MNI
+        self.submask_index = None
         self.mask_shape = mask_shape            # shape of mask (usually mni)
         self.mask_threshold = mask_threshold
 
         # Information about condition/class        
         self.class_labels = np.asarray(class_labels)        # class-labels trials 
         self.class_names = np.unique(self.class_labels)
-        self.n_class = len(np.unique(num_labels)) 
+        self.n_class = len(np.unique(num_labels))
         self.n_inst = [np.sum(cls == num_labels) for cls in np.unique(num_labels)]
-                  
+
         self.class_idx = [num_labels == cls for cls in np.unique(num_labels)]
         self.trial_idx = [np.where(num_labels == cls)[0] for cls in np.unique(num_labels)]
-                              
+
         self.num_labels = num_labels
         self.grouping = grouping
-        
+
     def normalize(self, style):
         pass
 
 
 def extract_class_vector(sub_path, remove_class):
     """ Extracts class of each trial and returns a vector of class labels."""
-    
+
     sub_name = os.path.basename(os.path.normpath(sub_path))
     to_parse = opj(sub_path, 'design.con')
-    
+
     # Read in design.con
     if os.path.isfile(to_parse):
         with open(to_parse, 'r') as con_file:
             con_read = csv.reader(con_file, delimiter='\t')
-            class_labels = []            
-            
+            class_labels = []
+
             # Extract class of trials until /NumWaves
-            for line in con_read:     
+            for line in con_read:
                 if line[0] == '/NumWaves':
                     break
                 else:
@@ -94,22 +96,22 @@ def extract_class_vector(sub_path, remove_class):
         remove_idx = []
         for match in remove_class:
             to_remove = fnmatch.filter(class_labels, '*%s*' % match)
-            
+
             for name in to_remove:
                 remove_idx.append(class_labels.index(name))
-        
+
         remove_idx = list(set(remove_idx))
         [class_labels.pop(idx) for idx in sorted(remove_idx, reverse=True)]
 
         class_labels = [s.split('_')[0] for s in class_labels]
-    
+
         return class_labels, remove_idx
-                    
+
     else:
         print('There is no design.con file for ' + sub_name)
 
 
-def create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
+def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
                         grouping, norm_method='nothing'):
     """ 
     Creates subject-specific mvp matrices, initializes them as an
@@ -130,136 +132,119 @@ def create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
     
     Lukas Snoek    
     """
-    
-    data_dir = opj(os.getcwd(), '*%s*' % subject_stem, '*.feat')
-    
-    subject_dirs = sorted(glob.glob(data_dir))
-    mat_dir = opj(os.getcwd(), 'mvp_mats')
-    
-    if os.path.exists(mat_dir):
-        shutil.rmtree(mat_dir)
-    
-    os.makedirs(mat_dir)
-    
+
     # Load mask, create index
     mask_name = os.path.basename(mask)
     mask_vol = nib.load(mask)
     mask_shape = mask_vol.get_shape()
     mask_index = mask_vol.get_data().ravel() > mask_threshold
-    n_features = np.sum(mask_index)    
-    
-    for sub_path in subject_dirs:
+    n_features = np.sum(mask_index)
 
-        n_feat = len(glob.glob(os.path.dirname(sub_path) + '/*.feat'))
+    n_feat = len(glob.glob(opj(os.path.dirname(sub_path), '*.feat')))
 
-        # Extract class vector (see definition below)
-        class_labels, remove_idx = extract_class_vector(sub_path, remove_class)
-        
-        # Grouping
-        if len(grouping) == 0:
-            grouping = np.unique(class_labels)
-            
-        num_labels = np.zeros(len(class_labels))
-        for i, group in enumerate(grouping):
-            
-            if type(group) == list:
-                matches = []
-                for g in group:
-                    matches.append(fnmatch.filter(class_labels, '*%s*' % g))
-                matches = [x for y in matches for x in y]
-            else:
-                matches = fnmatch.filter(class_labels, '*%s*' % group)
-                matches = list(set(matches))
+    # Extract class vector (see definition below)
+    class_labels, remove_idx = extract_class_vector(sub_path, remove_class)
 
-            for match in matches:
-                for k, lab in enumerate(class_labels):
-                    if match == lab:
-                        num_labels[k] = i + 1
-                        
-        sub_name = os.path.basename(os.path.dirname(sub_path))
-        
-        print 'Processing ' + os.path.basename(sub_path) + ' ... ',
-        
-        # Generate and sort paths to stat files (COPEs/tstats)
-        reg_dir = opj(sub_path, 'reg_standard')
+    # Grouping
+    if len(grouping) == 0:
+        grouping = np.unique(class_labels)
 
-        if norm_method == 'nothing':
-            stat_paths = glob.glob(opj(reg_dir, 'tstat*.nii.gz'))
+    num_labels = np.zeros(len(class_labels))
+    for i, group in enumerate(grouping):
+
+        if type(group) == list:
+            matches = []
+            for g in group:
+                matches.append(fnmatch.filter(class_labels, '*%s*' % g))
+            matches = [x for y in matches for x in y]
         else:
-            stat_paths = glob.glob(opj(reg_dir, 'cope*.nii.gz'))
-        
-        stat_paths = sort_stat_list(stat_paths) # see function below
-        
-        # Remove trials that shouldn't be analyzed (based on remove_class)
-        [stat_paths.pop(idx) for idx in sorted(remove_idx, reverse=True)]
-        n_stat = len(stat_paths)
+            matches = fnmatch.filter(class_labels, '*%s*' % group)
+            matches = list(set(matches))
 
-        if not n_stat == len(class_labels):
-            msg = 'The number of trials do not match the number of class labels'
-            raise ValueError(msg)
+        for match in matches:
+            for k, lab in enumerate(class_labels):
+                if match == lab:
+                    num_labels[k] = i + 1
 
-        if n_stat == 0: 
-            raise ValueError('There are no valid COPES/tstats in %s. ' \
-            'Check whether there is a reg_standard directory!' % os.getcwd())
-        
-        # Pre-allocate
-        mvp_data = np.zeros([n_stat, n_features])
+    sub_name = os.path.basename(sub_path)
 
-        # Load in data (COPEs)
-        for i, path in enumerate(stat_paths):
-            cope = nib.load(path).get_data()
-            mvp_data[i,:] = np.ravel(cope)[mask_index]
+    print 'Processing ' + os.path.basename(sub_path) + ' ... '
 
-        ''' NORMALIZATION OF VOXEL PATTERNS '''
-        if norm_method == 'univariate':
-            varcopes = glob.glob(opj(sub_path,'reg_standard','varcope*.nii.gz'))
-            varcopes = sort_stat_list(varcopes)
-            [varcopes.pop(idx) for idx in sorted(remove_idx, reverse=True)]
-            
-            for i_trial, varcope in enumerate(varcopes):
-                var = nib.load(varcope).get_data()
-                var_sq = np.sqrt(var.ravel()[mask_index])
-                mvp_data[i_trial,] = mvp_data[i_trial,] / var_sq
-           
-        if norm_method == 'multivariate':
-            res4d = nib.load(sub_path + '/stats_new/res4d_mni.nii.gz').get_data()
-            res4d.resize([np.prod(res4d.shape[0:3]), res4d.shape[3]])
-            res4d = res4d[mask_index,]            
-        
-            if sum(mask_index) > 10000:
-                msg = 'Mask probably too large to calculate covariance matrix'
-                raise ValueError(msg)
-            #res_cov = np.cov(res4d)
-        
-        mvp_data[np.isnan(mvp_data)] = 0
-        mvp_data = preproc.scale(mvp_data)
-        
-        # Initializing mvp_mat object, which will be saved as a pickle file
-        to_save = MVPHeader(mvp_data, sub_name, mask_name, mask_index,
-                           mask_shape, mask_threshold, class_labels,
-                            num_labels, grouping)
+    # Generate and sort paths to stat files (COPEs/tstats)
+    reg_dir = opj(sub_path, 'reg_standard')
 
-        if n_feat > 1:
-            fn_header = opj(mat_dir, '%s_header_run1.cPickle' % sub_name)
-            fn_data = opj(mat_dir, '%s_data_run1.hdf5' % sub_name)
-        else:
-            fn_header = opj(mat_dir, '%s_header.cPickle' % sub_name)
-            fn_data = opj(mat_dir, '%s_data.hdf5' % sub_name)
+    # Transform res4d
+    res4d = opj(sub_path, 'stats', 'res4d.nii.gz')
+    mat_file = opj(sub_path, 'reg', 'example_func2highres.mat')
+    out_file = opj(mat_dir, '%s_res4d.nii.gz' % sub_name)
+    ref_file = opj(sub_path, 'reg', 'standard.nii.gz')
 
-        if os.path.exists(fn_header):
-            fn_header = opj(mat_dir, '%s_header_run2.cPickle' % (sub_name))
-            fn_data = opj(mat_dir, '%s_data_run2.hdf5' % sub_name)
+    apply_xfm = fsl.ApplyXfm()
+    apply_xfm.inputs.in_file = res4d
+    apply_xfm.inputs.in_matrix_file = mat_file
+    apply_xfm.inputs.out_file = out_file
+    apply_xfm.inputs.reference = ref_file
+    apply_xfm.inputs.apply_xfm = True
+    apply_xfm.interp = 'nearestneighbor'
+    apply_xfm.run()
 
-        with open(fn_header, 'wb') as handle:
-            cPickle.dump(to_save, handle)
+    if norm_method == 'nothing':
+        stat_paths = glob.glob(opj(reg_dir, 'tstat*.nii.gz'))
+    else:
+        stat_paths = glob.glob(opj(reg_dir, 'cope*.nii.gz'))
 
-        h5f = h5py.File(fn_data, 'w')
-        h5f.create_dataset('data', data=mvp_data)
-        h5f.close()
+    stat_paths = sort_stat_list(stat_paths) # see function below
 
-        print 'done.'
+    # Remove trials that shouldn't be analyzed (based on remove_class)
+    [stat_paths.pop(idx) for idx in sorted(remove_idx, reverse=True)]
+    n_stat = len(stat_paths)
 
-    print 'Created %i mvp objects' %  len(glob.glob(opj(mat_dir,'*.cPickle')))
+    if not n_stat == len(class_labels):
+        msg = 'The number of trials do not match the number of class labels'
+        raise ValueError(msg)
+
+    if n_stat == 0:
+        raise ValueError('There are no valid COPES/tstats in %s. ' \
+                         'Check whether there is a reg_standard directory!' % os.getcwd())
+
+    # Pre-allocate
+    mvp_data = np.zeros([n_stat, n_features])
+
+    # Load in data (COPEs)
+    for i, path in enumerate(stat_paths):
+        cope = nib.load(path).get_data()
+        mvp_data[i,:] = np.ravel(cope)[mask_index]
+
+    ''' NORMALIZATION OF VOXEL PATTERNS '''
+    if norm_method == 'univariate':
+        varcopes = glob.glob(opj(sub_path,'reg_standard','varcope*.nii.gz'))
+        varcopes = sort_stat_list(varcopes)
+        [varcopes.pop(idx) for idx in sorted(remove_idx, reverse=True)]
+
+        for i_trial, varcope in enumerate(varcopes):
+            var = nib.load(varcope).get_data()
+            var_sq = np.sqrt(var.ravel()[mask_index])
+            mvp_data[i_trial,] = mvp_data[i_trial,] / var_sq
+
+    mvp_data[np.isnan(mvp_data)] = 0
+    mvp_data = preproc.scale(mvp_data)
+
+    # Initializing mvp_mat object, which will be saved as a pickle file
+    to_save = MVPHeader(mvp_data, sub_name, mask_name, mask_index,
+                        mask_shape, mask_threshold, class_labels,
+                        num_labels, grouping)
+
+    fn_header = opj(mat_dir, '%s_header.cPickle' % sub_name)
+    fn_data = opj(mat_dir, '%s_data.hdf5' % sub_name)
+
+    with open(fn_header, 'wb') as handle:
+        cPickle.dump(to_save, handle)
+
+    h5f = h5py.File(fn_data, 'w')
+    h5f.create_dataset('data', data=mvp_data)
+    h5f.close()
+
+    print 'Done processing %s.' % sub_name
 
 
 def sort_stat_list(stat_list):
@@ -269,11 +254,11 @@ def sort_stat_list(stat_list):
     This function extracts the numbers from the stat files and sorts 
     the original list accordingly.
     """
-    num_list = []    
+    num_list = []
     for path in stat_list:
         num = [str(s) for s in str(os.path.basename(path)) if s.isdigit()]
         num_list.append(int(''.join(num)))
-    
+
     sorted_list = [x for y, x in sorted(zip(num_list, stat_list))]
     return(sorted_list)
 
@@ -283,7 +268,7 @@ def merge_runs():
     Merges mvp_mat objects from multiple runs. 
     Incomplete; assumes only two runs for now.
     '''
-    
+
     header_paths = sorted(glob.glob(opj(os.getcwd(),'mvp_mats','*cPickle*')))
     header_paths = zip(header_paths[::2], header_paths[1::2])
 
@@ -292,7 +277,7 @@ def merge_runs():
 
     sub_paths = zip(header_paths, data_paths)
     n_sub = len(sub_paths)
-    
+
     for header, data in sub_paths:
         run1_h = cPickle.load(open(header[0]))
         run2_h = cPickle.load(open(header[1]))
@@ -305,21 +290,21 @@ def merge_runs():
         merged_mask_shape = run1_h.mask_shape
         merged_mask_name = run1_h.mask_name
         merged_mask_threshold = run1_h.mask_threshold
-        merged_name = run1_h.subject_name
-        
+        merged_name = run1_h.subject_name.split('-')[0]
+
         merged_data = np.empty((run1_d['data'].shape[0] +
                                 run2_d['data'].shape[0],
                                 run1_d['data'].shape[1]))
 
         merged_data[::2,:] = run1_d['data'][:]
         merged_data[1::2,:] = run2_d['data'][:]
-        
+
         merged_class_labels = list(chain.from_iterable(izip(run1_h.class_labels,
                                                             run2_h.class_labels)))
 
         merged_num_labels = list(chain.from_iterable(izip(run1_h.num_labels,
                                                           run2_h.num_labels)))
-                  
+
         to_save = MVPHeader(merged_data, merged_name, merged_mask_name,
                             merged_mask_index, merged_mask_shape,
                             merged_mask_threshold, merged_class_labels,
@@ -336,27 +321,41 @@ def merge_runs():
 
         print "Merged subject %s " % merged_name
 
-    os.system('rm %s' % opj(os.getcwd(), 'mvp_mats','*run*'))
+    os.system('rm %s' % opj(os.getcwd(), 'mvp_mats', '*WIPPM*.cPickle'))
+    os.system('rm %s' % opj(os.getcwd(), 'mvp_mats', '*WIPPM*.hdf5'))
 
-if __name__ == "__main__":
-    home = os.path.expanduser("~")
-    script_dir = opj(home,'LOCAL','Analysis_scripts')
+if __name__ == '__main__':
+
+    from joblib import Parallel, delayed
+
+    home = os.path.expanduser('~')
+    script_dir = opj(home, 'LOCAL', 'Analysis_scripts')
     sys.path.append(script_dir)
-    ROI_dir = opj(home,'ROIs')
+    ROI_dir = opj(home, 'ROIs')
 
     GM_mask = opj(ROI_dir, 'GrayMatter.nii.gz')
     MNI_mask = opj(ROI_dir, 'MNI152_T1_2mm_brain.nii.gz')
 
-    feat_dir = opj(home, 'DynamicAffect_MV/FSL_FirstLevel_Posttest')
+    feat_dir = opj(home, 'DecodingEmotions')
     os.chdir(feat_dir)
 
     mask = GM_mask
-    subject_stem = 'da'
-    mask_threshold = 10
-    remove_class = ['eval', 'neu']
-    grouping = ['pos', 'neg']
+    subject_stem = 'HWW'
+    mask_threshold = 0
+    remove_class = []
+    grouping = []
     norm_method = 'univariate'
 
-    create_subject_mats(mask, subject_stem, mask_threshold, remove_class,
-                        grouping=grouping, norm_method='univariate')
-#merge_runs()
+    data_dir = opj(os.getcwd(), '*%s*' % subject_stem, '*.feat')
+    subject_dirs = sorted(glob.glob(data_dir))
+    mat_dir = opj(os.getcwd(), 'mvp_mats')
+
+    if os.path.exists(mat_dir):
+        shutil.rmtree(mat_dir)
+
+    os.makedirs(mat_dir)
+
+    Parallel(n_jobs=len(subject_dirs)) \
+        (delayed(create_subject_mats)(sub_dir, mask, mask_threshold, remove_class, grouping, norm_method) for sub_dir in subject_dirs)
+
+    merge_runs()
