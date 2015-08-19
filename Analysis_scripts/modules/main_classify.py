@@ -12,7 +12,6 @@ import glob
 import os
 import sys
 import numpy as np
-import itertools
 import cPickle
 import nibabel as nib
 import h5py
@@ -20,15 +19,14 @@ import datetime
 import time
 from sklearn import svm
 from sklearn.cross_validation import StratifiedShuffleSplit
-import multiprocessing as mp
 import pandas as pd
+import itertools
 
 from sklearn.feature_selection import f_classif, GenericUnivariateSelect
 from os.path import join as opj
 from sklearn.metrics import confusion_matrix
-
 from sklearn.base import TransformerMixin
-import itertools
+from nipype.interfaces.fsl.model import Cluster as cluster
 
 class SelectAboveZvalue(TransformerMixin):
     """
@@ -65,7 +63,7 @@ class SelectAboveZvalue(TransformerMixin):
     def transform(self, X):
         return X[:, self.idx]
 
-def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_average):
+def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_average, fs_cluster, cluster_min):
     """
     Main classification function that classifies subject-specific
     mvp_mat objects according to their classes (specified in .num_labels).
@@ -135,6 +133,7 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_a
             train_data = mvp.data[train_idx, :]
             test_data = mvp.data[test_idx, :]
 
+            train_labels = np.asarray(mvp.num_labels)
             train_labels = np.asarray(mvp.num_labels)[train_idx]
             test_labels = np.asarray(mvp.num_labels)[test_idx]
 
@@ -145,11 +144,42 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_a
             #         (file_name, zval))
             selector.fit(train_data, train_labels)
 
+            if fs_cluster:
+                fs = np.zeros(mvp.mask_shape).ravel()
+                fs[mvp.mask_index] = selector.zvalues
+                fs = fs.reshape(mvp.mask_shape)
+                img = nib.Nifti1Image(fs, np.eye(4))
+                file_name = opj(os.getcwd(), '%s_ToCluster.nii.gz' % mvp.subject_name)
+                nib.save(img, file_name)
+
+                cmd = 'cluster -i %s -t %f -o %s --no_table' % (file_name, fs_arg, file_name)
+                _ = os.system(cmd)
+
+                clustered = nib.load(file_name).get_data()
+                clt_idc = sorted(np.unique(clustered), reverse=True)
+
+                cl_train_data = np.zeros((train_data.shape[0], len(clt_idc)))
+                cl_test_data = np.zeros((test_data.shape[0], len(clt_idc)))
+
+                for j, clt in enumerate(clt_idc):
+                    idx = (clustered == clt).ravel()[mvp.mask_index]
+
+                    if np.sum(idx) < cluster_min:
+                        break
+                    else:
+                        cl_train_data[:, j] = np.mean(train_data[:, idx], axis=1)
+                        cl_test_data[:, j] = np.mean(test_data[:, idx], axis=1)
+
+                train_data = cl_train_data[np.invert(cl_train_data == 0)]
+                train_data = train_data.reshape((cl_train_data.shape[0], train_data.shape[0] / cl_train_data.shape[0]))
+                test_data = cl_test_data[np.invert(cl_test_data == 0)]
+                test_data = test_data.reshape((cl_test_data.shape[0], test_data.shape[0] / cl_test_data.shape[0]))
+
             fs_score[selector.idx] = fs_score[selector.idx] + selector.zvalues[selector.idx]
             fs_count[selector.idx] += 1
 
-            clf.fit(selector.transform(train_data), train_labels)
-            score[i] = clf.score(selector.transform(test_data), test_labels)
+            clf.fit(train_data, train_labels)
+            score[i] = clf.score(test_data, test_labels)
 
         fs_score = np.divide(fs_score, fs_count)
         fs_score[np.isnan(fs_score)] = 0
@@ -261,12 +291,15 @@ if __name__ == "__main__":
     #mask_file = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'unilateral', '*nii.gz*')))
     mask_file = glob.glob(opj(ROI_dir, 'GrayMatter.nii.gz'))
     fs_method = SelectAboveZvalue
-    fs_arg = 2.3
+    fs_arg = 1.5
     fs_average = False
+    fs_cluster = True
+    cluster_min = 150
 
     # Run classification on n_cores = len(subjects)
     sub_results = Parallel(n_jobs=len(subject_dirs)) \
-        (delayed(mvp_classify)(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_average) for sub_dir in subject_dirs)
+        (delayed(mvp_classify)(sub_dir, mask_file, iterations, n_test, fs_method,
+                               fs_arg, fs_average, fs_cluster, cluster_min) for sub_dir in subject_dirs)
 
     average_classification_results(sub_results)
     # Concatenate subject-specific results and extract mean correct per mask
