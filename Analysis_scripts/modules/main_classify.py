@@ -63,7 +63,9 @@ class SelectAboveZvalue(TransformerMixin):
     def transform(self, X):
         return X[:, self.idx]
 
-def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_average, fs_cluster, cluster_min):
+
+def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg,
+                 fs_average, fs_cluster, cluster_min):
     """
     Main classification function that classifies subject-specific
     mvp_mat objects according to their classes (specified in .num_labels).
@@ -89,8 +91,9 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_a
 
     if fs_average and len(mask_file) > 1:
         print "Averaging features within ROIs ..."
-        mvp = average_features_within_rois(mvp, gm_data, mask_file)
+        mvp, av_idx = average_features_within_rois(mvp, gm_data, mask_file)
         mask_file = ['averaged']
+        mvp.mask_name = 'averaged ROIs'
 
     elif len(mask_file) == 1 and os.path.basename(mask_file[0]) == 'GrayMatter.nii.gz':
         mvp.data = gm_data
@@ -99,7 +102,7 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_a
 
     for cMask, roi in enumerate(mask_file):
 
-        if len(mask_file) > 1:
+        if len(mask_file) > 1 and not fs_average:
             mask_data = nib.load(roi).get_data()
             mask_mask = mask_data > mvp.mask_threshold
             mask_mask = np.reshape(mask_mask, mvp.mask_index.shape)
@@ -120,10 +123,10 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_a
             """
 
         print "Processing %s for subject %s (%i/%i)" % (mvp.mask_name, mvp.subject_name,
-                                                          cMask + 1, len(mask_file))
+                                                        cMask + 1, len(mask_file))
 
-        fs_count = np.zeros(mvp.n_features)
-        fs_score = np.zeros(mvp.n_features)
+        fs_count = np.zeros(np.sum(mvp.mask_index))
+        fs_score = np.zeros(np.sum(mvp.mask_index))
 
         sss = StratifiedShuffleSplit(y=mvp.num_labels, n_iter=iterations,
                                      test_size=n_test * mvp.n_class, random_state=0)
@@ -133,50 +136,38 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_a
             train_data = mvp.data[train_idx, :]
             test_data = mvp.data[test_idx, :]
 
-            train_labels = np.asarray(mvp.num_labels)
             train_labels = np.asarray(mvp.num_labels)[train_idx]
             test_labels = np.asarray(mvp.num_labels)[test_idx]
 
             #selector = GenericUnivariateSelect(f_classif, mode=fs_method, param=fs_arg)
             selector = fs_method(fs_arg)
-
-            # os.system('cluster -i %s -o clustered -t %f -osize=cluster_size > cluster_info' %
-            #         (file_name, zval))
             selector.fit(train_data, train_labels)
 
             if fs_cluster:
-                fs = np.zeros(mvp.mask_shape).ravel()
-                fs[mvp.mask_index] = selector.zvalues
-                fs = fs.reshape(mvp.mask_shape)
-                img = nib.Nifti1Image(fs, np.eye(4))
-                file_name = opj(os.getcwd(), '%s_ToCluster.nii.gz' % mvp.subject_name)
-                nib.save(img, file_name)
+                input = {'mvp': mvp, 'train_data': train_data,
+                         'test_data': test_data, 'fs_score': fs_score,
+                         'fs_count': fs_count, 'fs_arg': fs_arg,
+                         'cluster_min': cluster_min, 'selector': selector}
 
-                cmd = 'cluster -i %s -t %f -o %s --no_table' % (file_name, fs_arg, file_name)
-                _ = os.system(cmd)
+                output = clustercorrect_feature_selection(**input)
 
-                clustered = nib.load(file_name).get_data()
-                clt_idc = sorted(np.unique(clustered), reverse=True)
+                mvp = output['mvp']
+                train_data = output['train_data']
+                test_data = output['test_data']
+                fs_score = output['fs_score']
+                fs_count = output['fs_count']
 
-                cl_train_data = np.zeros((train_data.shape[0], len(clt_idc)))
-                cl_test_data = np.zeros((test_data.shape[0], len(clt_idc)))
+            elif fs_average:
+                for k in xrange(av_idx.shape[1]):
+                    av_idx = av_idx.astype(bool)
 
-                for j, clt in enumerate(clt_idc):
-                    idx = (clustered == clt).ravel()[mvp.mask_index]
-
-                    if np.sum(idx) < cluster_min:
-                        break
-                    else:
-                        cl_train_data[:, j] = np.mean(train_data[:, idx], axis=1)
-                        cl_test_data[:, j] = np.mean(test_data[:, idx], axis=1)
-
-                train_data = cl_train_data[np.invert(cl_train_data == 0)]
-                train_data = train_data.reshape((cl_train_data.shape[0], train_data.shape[0] / cl_train_data.shape[0]))
-                test_data = cl_test_data[np.invert(cl_test_data == 0)]
-                test_data = test_data.reshape((cl_test_data.shape[0], test_data.shape[0] / cl_test_data.shape[0]))
-
-            fs_score[selector.idx] = fs_score[selector.idx] + selector.zvalues[selector.idx]
-            fs_count[selector.idx] += 1
+                    if selector.idx[k]:
+                        fs_score[av_idx[:, k]] += selector.zvalues[k]
+                        fs_count[av_idx[:, k]] += 1
+            else:
+                idx = selector.idx
+                fs_score[idx] += selector.zvalues[idx]
+                fs_count[idx] += 1
 
             clf.fit(train_data, train_labels)
             score[i] = clf.score(test_data, test_labels)
@@ -184,13 +175,13 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_a
         fs_score = np.divide(fs_score, fs_count)
         fs_score[np.isnan(fs_score)] = 0
 
-        #out = np.zeros(mvp.mask_shape).ravel()
-        #out[mvp.mask_index] = fs_score
-        #out = out.reshape(mvp.mask_shape)
+        out = np.zeros(mvp.mask_shape).ravel()
+        out[mvp.mask_index] = fs_score
+        out = out.reshape(mvp.mask_shape)
 
-        #img = nib.Nifti1Image(out, np.eye(4))
-        #file_name = opj(os.getcwd(), '%s_feature_selection.nii.gz' % mvp.subject_name)
-        #nib.save(img, file_name)
+        img = nib.Nifti1Image(out, np.eye(4))
+        file_name = opj(os.getcwd(), '%s_feature_selection.nii.gz' % mvp.subject_name)
+        nib.save(img, file_name)
 
         df = {'sub_name': mvp.subject_name,
               #'contrast': mvp.c
@@ -206,6 +197,7 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg, fs_a
 def average_features_within_rois(mvp, gm_data, masks):
 
     av_data = np.zeros((mvp.n_trials, len(masks)))
+    av_idx = np.zeros((mvp.n_features, len(masks)))
 
     for cMask, roi in enumerate(masks):
         mask_data = nib.load(roi).get_data()
@@ -213,12 +205,69 @@ def average_features_within_rois(mvp, gm_data, masks):
         mask_mask = np.reshape(mask_mask, mvp.mask_index.shape)
         mask_overlap = mask_mask.astype(int) + mvp.mask_index.astype(int)
         idx = (mask_overlap == 2)[mvp.mask_index]
+
         av_data[:, cMask] = np.mean(gm_data[:, idx], axis=1)
+        av_idx[:, cMask] = idx
 
     mvp.data = av_data
     mvp.n_features = len(mask_file)
 
-    return(mvp)
+    return mvp, av_idx
+
+
+def clustercorrect_feature_selection(**input):
+
+    mvp = input['mvp']
+    train_data = input['train_data']
+    test_data = input['test_data']
+    fs_score = input['fs_score']
+    fs_count = input['fs_count']
+    selector = input['selector']
+    cluster_min = input['cluster_min']
+
+    fs = np.zeros(mvp.mask_shape).ravel()
+    fs[mvp.mask_index] = selector.zvalues
+    fs = fs.reshape(mvp.mask_shape)
+    img = nib.Nifti1Image(fs, np.eye(4))
+    file_name = opj(os.getcwd(), '%s_ToCluster.nii.gz' % mvp.subject_name)
+    nib.save(img, file_name)
+
+    cmd = 'cluster -i %s -t %f -o %s --no_table' % (file_name, fs_arg, file_name)
+    _ = os.system(cmd)
+
+    clustered = nib.load(file_name).get_data()
+    cluster_IDs = sorted(np.unique(clustered), reverse=True)
+
+    cl_train = np.zeros((train_data.shape[0], len(cluster_IDs)))
+    cl_test = np.zeros((test_data.shape[0], len(cluster_IDs)))
+    cl_idx = np.zeros((mvp.data.shape[1], len(cluster_IDs)))
+
+    for j, clt in enumerate(cluster_IDs):
+        idx = (clustered == clt).ravel()[mvp.mask_index]
+
+        if np.sum(idx) < cluster_min:
+            break
+        else:
+            cl_idx[:, j] = idx
+            cl_train[:, j] = np.mean(train_data[:, idx], axis=1)
+            cl_test[:, j] = np.mean(test_data[:, idx], axis=1)
+
+    train_data = cl_train[:, np.invert((np.sum(cl_train, 0)) == 0)]
+    test_data = cl_test[:, np.invert((np.sum(cl_test, 0)) == 0)]
+    cl_idx = cl_idx[:, np.sum(cl_idx, 0) > 0].astype(bool)
+
+    n_clust = train_data[1]
+
+    for k in xrange(cl_idx.shape[1]):
+        av_cluster = np.mean(fs.ravel()[mvp.mask_index][cl_idx[:, k]])
+        fs_score[cl_idx[:, k]] += av_cluster
+        fs_count[cl_idx[:, k]] += 1
+
+    output = {'mvp': mvp, 'train_data': train_data, 'test_data': test_data,
+              'fs_score': fs_score, 'fs_count': fs_count}
+
+    return output
+
 
 def average_classification_results(sub_results):
     sub_results = pd.concat(sub_results)
@@ -229,7 +278,6 @@ def average_classification_results(sub_results):
         score = np.mean(sub_results['score'][sub_results['mask'] == mask]).round(3)
         df = {'mask': mask,
               'score': score}
-
 
         total_df.append(pd.DataFrame(df, index=[1]))
 
@@ -250,12 +298,12 @@ def average_classification_results(sub_results):
     with open('results_summary', 'a') as f:
         to_write.to_csv(f, header=False, sep='\t', index=False)
 
-    to_average = glob.glob('*.nii.gz')
+    to_average = glob.glob('*HWW*feature_selection*')
     mni_mask = np.zeros((91,109,91))
 
     for f in to_average:
         data = nib.load(f).get_data()
-        mni_mask = mni_mask + data
+        mni_mask += data
 
     mni_mask = np.divide(mni_mask, len(to_average))
     img = nib.Nifti1Image(mni_mask, np.eye(4))
@@ -288,12 +336,12 @@ if __name__ == "__main__":
     # Parameters for classification
     iterations = 100
     n_test = 1
-    #mask_file = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'unilateral', '*nii.gz*')))
-    mask_file = glob.glob(opj(ROI_dir, 'GrayMatter.nii.gz'))
+    mask_file = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'bilateral', '*nii.gz*')))
+    #mask_file = glob.glob(opj(ROI_dir, 'GrayMatter.nii.gz'))
     fs_method = SelectAboveZvalue
-    fs_arg = 1.5
-    fs_average = False
-    fs_cluster = True
+    fs_arg = 0
+    fs_average = True
+    fs_cluster = False
     cluster_min = 150
 
     # Run classification on n_cores = len(subjects)
