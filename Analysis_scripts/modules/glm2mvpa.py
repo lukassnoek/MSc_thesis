@@ -228,14 +228,6 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
         for stat, varc in to_transform:
 
             out_file = opj(out_dir, os.path.basename(stat))
-            #apply_xfm = fsl.ApplyXfm()
-            #apply_xfm.inputs.in_file = stat
-            #apply_xfm.inputs.in_matrix_file = mat_file
-            #apply_xfm.inputs.out_file = out_file
-            #apply_xfm.inputs.reference = ref_file
-            #apply_xfm.inputs.apply_xfm = True
-            #apply_xfm.interp = 'trilinear'
-            #apply_xfm.run()
             apply_warp = fsl.ApplyWarp()
             apply_warp.inputs.in_file = stat
             apply_warp.inputs.ref_file = ref_file
@@ -245,14 +237,6 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
             apply_warp.run()
 
             out_file = opj(out_dir, os.path.basename(varc))
-            #apply_xfm.inputs.in_file = stat
-            #apply_xfm.inputs.in_matrix_file = mat_file
-            #apply_xfm.inputs.out_file = out_file
-            #apply_xfm.inputs.reference = ref_file
-            #apply_xfm.inputs.apply_xfm = True
-            #apply_xfm.interp = 'trilinear'
-            #apply_xfm.run()
-
             apply_warp = fsl.ApplyWarp()
             apply_warp.inputs.in_file = varc
             apply_warp.inputs.ref_file = ref_file

@@ -21,11 +21,10 @@ from os.path import join as opj
 import numpy as np
 import nibabel as nib
 import h5py
-from sklearn.cross_validation import StratifiedShuffleSplit
+from sklearn.cross_validation import StratifiedShuffleSplit, StratifiedKFold
 import pandas as pd
 from sklearn.base import TransformerMixin
 from sklearn.metrics import confusion_matrix
-from sklearn.cross_validation import StratifiedKFold
 
 
 class SelectAboveZvalue(TransformerMixin):
@@ -119,6 +118,9 @@ def mvp_classify(sub_dir, inputs):
         mvp, av_idx = average_features_within_rois(mvp, gm_data, mask_file)
         mask_file = ['averaged']
 
+        if fs_arg > 2:
+            fs_arg = .5
+
         """
         if test_demean:
             print "Demeaning features ..."
@@ -177,6 +179,7 @@ def mvp_classify(sub_dir, inputs):
         conf_mat = np.zeros((mvp.n_class, mvp.n_class))
         feature_count = np.zeros(iterations)
         feature_prop = np.zeros(iterations)
+        trials_score = np.zeros((mvp.n_trials, mvp.n_class))
 
         if fs_cluster:
             cluster_count = np.zeros(iterations)
@@ -192,6 +195,11 @@ def mvp_classify(sub_dir, inputs):
 
         for i, (train_idx, test_idx) in enumerate(folds):
             # Index data (X) and labels (y)
+
+            # just for testing
+            #test_idx = np.array([1, 45, 90])
+            #train_idx = np.delete(np.array(range(len(mvp.num_labels))), test_idx)
+
             train_data = mvp.data[train_idx, :]
             test_data = mvp.data[test_idx, :]
             train_labels = np.asarray(mvp.num_labels)[train_idx]
@@ -260,21 +268,29 @@ def mvp_classify(sub_dir, inputs):
             # Fit the SVM and score!
             clf.fit(train_data, train_labels)
             test_pred = clf.predict(test_data)
+
             conf_mat += confusion_matrix(test_labels, test_pred)
             score[i] = clf.score(test_data, test_labels)
+            trials_score[test_idx,(test_pred-1).astype(int)] += 1
 
             vox_score[vox_idx.astype(bool)] += score[i]
             feature_count[i] = train_data.shape[1]
-            feature_prop[i] = np.divide(feature_count[i], mvp.n_features)
+            feature_prop[i] = np.true_divide(feature_count[i], mvp.n_features)
 
         ### END iteration loop >> write out results of mask/ROI ###
 
-        conf_mat = np.divide(conf_mat, iterations * n_test)
+        conf_mat = np.true_divide(conf_mat, iterations * n_test)
+        filter_trials = np.sum(trials_score, 1) == 0
+        trials_max = np.argmax(trials_score, 1) + 1
+        trials_max[filter_trials] = 0
 
+        conf_mat2 = confusion_matrix(np.array(mvp.num_labels)[trials_max > 0], trials_max[trials_max > 0])
+        conf_mat2 = conf_mat2 / np.sum(conf_mat2, 1)
+        
         # Calculate mean feature selection score and set NaN to 0
-        fs_data['score'] = np.divide(fs_data['score'], fs_data['count'])
+        fs_data['score'] = np.true_divide(fs_data['score'], fs_data['count'])
         fs_data['score'][np.isnan(fs_data['score'])] = 0
-        vox_score = np.divide(vox_score, fs_data['count'])
+        vox_score = np.true_divide(vox_score, fs_data['count'])
         vox_score[np.isnan(vox_score)] = 0
 
         # Write out feature selection as nifti
@@ -297,7 +313,7 @@ def mvp_classify(sub_dir, inputs):
         # Write out classification results as pandas dataframe
         df = {'sub_name': mvp.subject_name,
               'mask': mvp.mask_name,
-              'score': np.round(np.mean(score), 3),
+              'score': np.round(np.mean(np.diag(conf_mat2)), 3),
               'fs_count': np.round(np.mean(feature_count), 3),
               'fs_prop': np.round(np.mean(feature_prop), 3)}
 
@@ -329,7 +345,7 @@ def average_features_within_rois(mvp, gm_data, masks):
         av_idx[:, cMask] = idx
 
     mvp.data = av_data
-    mvp.n_features = len(mask_file)
+    mvp.n_features = len(masks)
     mvp.mask_name = 'averaged ROIs'
 
     return mvp, av_idx.astype(bool)
@@ -342,6 +358,7 @@ def clustercorrect_feature_selection(**input):
     test_data = input['test_data']
     selector = input['selector']
     cluster_min = input['cluster_min']
+    fs_arg = input['fs_arg']
 
     fs = np.zeros(mvp.mask_shape).ravel()
     fs[mvp.mask_index] = selector.zvalues
@@ -414,7 +431,7 @@ def average_classification_results(inputs):
     fid.write('test_demean: \t %s \n \n' % test_demean)
     fid.close()
 
-    to_load = glob.glob('*results*.csv')
+    to_load = glob.glob('*results_HWW*.csv')
 
     dfs = []
     for sub in to_load:
@@ -442,18 +459,10 @@ def average_classification_results(inputs):
         os.rename('analysis_parameters', filename)
 
     else:
-        subs = np.unique(dfs['sub_name'])
-
-        for s in subs:
-            to_write['subject'] = s
-            to_write['score'] = np.mean(dfs['score'][dfs['sub_name'] == s])
-            df_list.append(pd.DataFrame(to_write, index=[0]))
-
-        df_list = pd.concat(df_list)
-        av_score = np.mean(df_list['score']).round(3)
+        av_score = np.mean(dfs['score']).round(3)
 
         with open('analysis_parameters', 'a') as f:
-            df_list.to_csv(f, header=True, sep='\t', index=False)
+            dfs.to_csv(f, header=True, sep='\t', index=False)
             f.write('\n Average score: \t %f' % av_score)
 
         filename = 'results_per_sub.csv'
@@ -476,7 +485,7 @@ def average_classification_results(inputs):
         vox_sub = nib.load(vox).get_data()
         vox_sum += vox_sub > 0.4
 
-    fs_av = np.divide(fs_sum, len(zipped_files))
+    fs_av = np.true_divide(fs_sum, len(zipped_files))
     img = nib.Nifti1Image(fs_av, np.eye(4))
     file_name = opj(os.getcwd(), 'averaged_feature_selection.nii.gz')
     nib.save(img, file_name)
@@ -508,8 +517,9 @@ if __name__ == '__main__':
 
     # Parameters for classification
     inputs = {}
-    inputs['iterations'] = 100
-    inputs['n_test'] = 1
+    inputs['iterations'] = 1000
+    inputs['n_test'] = 4
+    #inputs['mask_file'] = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'bilateral', '*nii.gz*')))
     #inputs['mask_file'] = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'unilateral', '*nii.gz*')))
     inputs['mask_file'] = glob.glob(opj(ROI_dir, 'GrayMatter.nii.gz'))
     inputs['fs_method'] = SelectAboveZvalue
