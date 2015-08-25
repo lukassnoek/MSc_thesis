@@ -49,7 +49,7 @@ class MVPHeader:
         self.n_features = data.shape[1]
         self.n_trials = data.shape[0]
 
-        # Information about mask        
+        # Information about mask
         self.mask_name = mask_name              # Name of nifti-file
         self.submask_name = None
         self.mask_index = mask_index            # index relative to MNI
@@ -57,8 +57,8 @@ class MVPHeader:
         self.mask_shape = mask_shape            # shape of mask (usually mni)
         self.mask_threshold = mask_threshold
 
-        # Information about condition/class        
-        self.class_labels = np.asarray(class_labels)        # class-labels trials 
+        # Information about condition/class
+        self.class_labels = np.asarray(class_labels)        # class-labels trials
         self.class_names = np.unique(self.class_labels)
         self.n_class = len(np.unique(num_labels))
         self.n_inst = [np.sum(cls == num_labels) for cls in np.unique(num_labels)]
@@ -136,7 +136,7 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
     # Load mask, create index
     mask_name = os.path.basename(mask)
     mask_vol = nib.load(mask)
-    mask_shape = mask_vol.get_shape()
+    mask_shape = mask_vol.shape
     mask_index = mask_vol.get_data().ravel() > mask_threshold
     n_features = np.sum(mask_index)
 
@@ -168,11 +168,9 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
 
     sub_name = os.path.basename(sub_path)
 
-    print 'Processing ' + os.path.basename(sub_path) + ' ... '
+    print 'Processing ' + os.path.basename(sub_name) + ' ... '
 
-    # Generate and sort paths to stat files (COPEs/tstats)
-    reg_dir = opj(sub_path, 'reg_standard')
-
+    os.chdir(sub_path)
     # Transform res4d
     res4d = opj(sub_path, 'stats', 'res4d.nii.gz')
     mat_file = opj(sub_path, 'reg', 'example_func2highres.mat')
@@ -186,18 +184,27 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
     apply_xfm.inputs.reference = ref_file
     apply_xfm.inputs.apply_xfm = True
     apply_xfm.interp = 'nearestneighbor'
-    apply_xfm.run()
+    _ = apply_xfm.run()
+    os.chdir('..')
+
+    # Generate and sort paths to stat files (COPEs/tstats)
+    stat_dir = opj(sub_path, 'reg_standard')
+    if not os.path.isdir(stat_dir):
+        os.mkdir(stat_dir)
+        stat_dir = opj(sub_path, 'stats')
 
     if norm_method == 'nothing':
-        stat_paths = glob.glob(opj(reg_dir, 'tstat*.nii.gz'))
+        stat_paths = glob.glob(opj(stat_dir, 'tstat*.nii.gz'))
     else:
-        stat_paths = glob.glob(opj(reg_dir, 'cope*.nii.gz'))
+        stat_paths = glob.glob(opj(stat_dir, 'cope*.nii.gz'))
 
     stat_paths = sort_stat_list(stat_paths) # see function below
-
-    # Remove trials that shouldn't be analyzed (based on remove_class)
     [stat_paths.pop(idx) for idx in sorted(remove_idx, reverse=True)]
     n_stat = len(stat_paths)
+
+    varcopes = glob.glob(opj(stat_dir,'varcope*.nii.gz'))
+    varcopes = sort_stat_list(varcopes)
+    [varcopes.pop(idx) for idx in sorted(remove_idx, reverse=True)]
 
     if not n_stat == len(class_labels):
         msg = 'The number of trials do not match the number of class labels'
@@ -206,6 +213,62 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
     if n_stat == 0:
         raise ValueError('There are no valid COPES/tstats in %s. ' \
                          'Check whether there is a reg_standard directory!' % os.getcwd())
+
+    # Transform to mni space if necessary
+    if os.path.basename(stat_dir) == 'stats':
+        os.chdir(sub_path)
+        print "Transforming COPES to MNI for %s." % sub_name
+        mat_file = opj(sub_path, 'reg', 'example_func2standard.mat')
+        ref_file = opj(sub_path, 'reg', 'standard.nii.gz')
+        field_file = opj(sub_path, 'reg', 'example_func2standard_warp.nii.gz')
+        out_dir = opj(sub_path, 'reg_standard')
+
+        to_transform = zip(stat_paths, varcopes)
+
+        for stat, varc in to_transform:
+
+            out_file = opj(out_dir, os.path.basename(stat))
+            #apply_xfm = fsl.ApplyXfm()
+            #apply_xfm.inputs.in_file = stat
+            #apply_xfm.inputs.in_matrix_file = mat_file
+            #apply_xfm.inputs.out_file = out_file
+            #apply_xfm.inputs.reference = ref_file
+            #apply_xfm.inputs.apply_xfm = True
+            #apply_xfm.interp = 'trilinear'
+            #apply_xfm.run()
+            apply_warp = fsl.ApplyWarp()
+            apply_warp.inputs.in_file = stat
+            apply_warp.inputs.ref_file = ref_file
+            apply_warp.inputs.field_file = field_file
+            apply_warp.interp = 'trilinear'
+            apply_warp.inputs.out_file = out_file
+            apply_warp.run()
+
+            out_file = opj(out_dir, os.path.basename(varc))
+            #apply_xfm.inputs.in_file = stat
+            #apply_xfm.inputs.in_matrix_file = mat_file
+            #apply_xfm.inputs.out_file = out_file
+            #apply_xfm.inputs.reference = ref_file
+            #apply_xfm.inputs.apply_xfm = True
+            #apply_xfm.interp = 'trilinear'
+            #apply_xfm.run()
+
+            apply_warp = fsl.ApplyWarp()
+            apply_warp.inputs.in_file = varc
+            apply_warp.inputs.ref_file = ref_file
+            apply_warp.inputs.field_file = field_file
+            apply_warp.interp = 'trilinear'
+            apply_warp.inputs.out_file = out_file
+            apply_warp.run()
+
+        stat_dir = opj(sub_path, 'reg_standard')
+        stat_paths = glob.glob(opj(stat_dir, 'cope*'))
+        stat_paths = sort_stat_list(stat_paths) # see function below
+
+        varcopes = glob.glob(opj(stat_dir, 'varcope*'))
+        varcopes = sort_stat_list(varcopes) # see function below
+
+        os.chdir('..')
 
     # Pre-allocate
     mvp_data = np.zeros([n_stat, n_features])
@@ -217,14 +280,11 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
 
     ''' NORMALIZATION OF VOXEL PATTERNS '''
     if norm_method == 'univariate':
-        varcopes = glob.glob(opj(sub_path,'reg_standard','varcope*.nii.gz'))
-        varcopes = sort_stat_list(varcopes)
-        [varcopes.pop(idx) for idx in sorted(remove_idx, reverse=True)]
 
         for i_trial, varcope in enumerate(varcopes):
             var = nib.load(varcope).get_data()
             var_sq = np.sqrt(var.ravel()[mask_index])
-            mvp_data[i_trial,] = mvp_data[i_trial,] / var_sq
+            mvp_data[i_trial,] = np.divide(mvp_data[i_trial,], var_sq)
 
     mvp_data[np.isnan(mvp_data)] = 0
     mvp_data = preproc.scale(mvp_data)
