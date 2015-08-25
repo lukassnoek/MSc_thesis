@@ -25,6 +25,7 @@ from sklearn.cross_validation import StratifiedShuffleSplit
 import pandas as pd
 from sklearn.base import TransformerMixin
 from sklearn.metrics import confusion_matrix
+from sklearn.cross_validation import StratifiedKFold
 
 
 class SelectAboveZvalue(TransformerMixin):
@@ -63,8 +64,7 @@ class SelectAboveZvalue(TransformerMixin):
         return X[:, self.idx]
 
 
-def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg,
-                 fs_average, fs_cluster, cluster_min, test_demean):
+def mvp_classify(sub_dir, inputs):
     """
     Main classification function that classifies subject-specific
     mvp_mat objects according to their classes (specified in .num_labels).
@@ -79,6 +79,17 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg,
                       patterns across classes.
     """
 
+    iterations = inputs['iterations']
+    n_test= inputs['n_test']
+    mask_file = inputs['mask_file']
+    fs_method = inputs['fs_method']
+    fs_arg = inputs['fs_arg']
+    fs_average= inputs['fs_average']
+    fs_cluster = inputs['fs_cluster']
+    cluster_min = inputs['cluster_min']
+    test_demean = inputs['test_demean']
+    cv_method = inputs['cv_method']
+
     # Definition of classifier
     clf = svm.LinearSVC()
 
@@ -91,15 +102,15 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg,
 
     # Check feasibility of parameter settings
     if fs_average and len(mask_file) == 1:
-        msg = "fs_average with one ROI is impossible ... abort."
+        msg = "fs_average with one ROI is impossible."
         raise ValueError(msg)
 
     if fs_cluster and len(mask_file) > 1:
-        msg = "fs_cluster within individual ROIs is not a good idea ... abort."
+        msg = "fs_cluster within individual ROIs is not a good idea."
         raise ValueError(msg)
 
     if fs_cluster and fs_average:
-        msg = "fs_average and fs_cluster together doesn't make sense ... abort."
+        msg = "fs_average and fs_cluster together doesn't make sense."
         raise ValueError(msg)
 
     # Start preprocessing data and updating parameters if necessary
@@ -171,11 +182,15 @@ def mvp_classify(sub_dir, mask_file, iterations, n_test, fs_method, fs_arg,
             cluster_count = np.zeros(iterations)
 
         ### Create cross_validation scheme and start iteration-loop ###
-        sss = StratifiedShuffleSplit(mvp.num_labels, iterations,
-                                     n_test * mvp.n_class, random_state=0)
+        #sss = StratifiedShuffleSplit(mvp.num_labels, iterations,
+        #                             n_test * mvp.n_class, random_state=0)
 
-        for i, (train_idx, test_idx) in enumerate(sss):
+        if cv_method.__name__ == 'StratifiedShuffleSplit':
+            folds = cv_method(mvp.num_labels, iterations, n_test * mvp.n_class)
+        else:
+            folds = cv_method(mvp.num_labels, iterations)
 
+        for i, (train_idx, test_idx) in enumerate(folds):
             # Index data (X) and labels (y)
             train_data = mvp.data[train_idx, :]
             test_data = mvp.data[test_idx, :]
@@ -365,9 +380,18 @@ def clustercorrect_feature_selection(**input):
     return output
 
 
-def average_classification_results(args):
+def average_classification_results(inputs):
 
-    mask_file, fs_method, fs_arg, fs_average, fs_cluster, cluster_min, test_demean = args
+    iterations = inputs['iterations']
+    n_test = inputs['n_test']
+    mask_file = inputs['mask_file']
+    fs_method = inputs['fs_method']
+    fs_arg = inputs['fs_arg']
+    fs_average = inputs['fs_average']
+    fs_cluster = inputs['fs_cluster']
+    cluster_min = inputs['cluster_min']
+    test_demean = inputs['test_demean']
+    cv_method = inputs['cv_method']
 
     # Create header
     fid = open('analysis_parameters', 'w')
@@ -377,8 +401,9 @@ def average_classification_results(args):
         fid.write('Mask \t %s \n' % mask_file)
 
     fid.write('Iterations: \t %s \n' % iterations)
+    fid.write('CV_method: \t %s \n' % cv_method.__name__)
     fid.write('N-test: \t %s \n' % n_test)
-    fid.write('fs_method: \t %s \n' % fs_method)
+    fid.write('fs_method: \t %s \n' % fs_method.__name__)
     fid.write('fs_arg: \t %f \n' % fs_arg)
     fid.write('fs_average: \t %s \n' % fs_average)
     fid.write('fs_cluster: \t %s \n' % fs_cluster)
@@ -386,7 +411,7 @@ def average_classification_results(args):
     if fs_cluster:
         fid.write('cluster_min: \t %i \n' % cluster_min)
 
-    fid.write('test_demean: \t %f \n \n' % test_demean)
+    fid.write('test_demean: \t %s \n \n' % test_demean)
     fid.close()
 
     to_load = glob.glob('*results*.csv')
@@ -463,7 +488,7 @@ def average_classification_results(args):
     os.system('cat %s' % filename)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
 
     sys.path.append('/home/c6386806/LOCAL/Analysis_scripts/')
 
@@ -482,22 +507,21 @@ if __name__ == "__main__":
     subject_dirs = zip(header_dirs, data_dirs)
 
     # Parameters for classification
-    iterations = 10
-    n_test = 1
-    mask_file = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'bilateral', '*nii.gz*')))
-    #mask_file = glob.glob(opj(ROI_dir, 'GrayMatter.nii.gz'))
-    fs_method = SelectAboveZvalue
-    fs_arg = 1
-    fs_average = False
-    fs_cluster = False
-    cluster_min = 10
-    test_demean = False
+    inputs = {}
+    inputs['iterations'] = 100
+    inputs['n_test'] = 1
+    #inputs['mask_file'] = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'unilateral', '*nii.gz*')))
+    inputs['mask_file'] = glob.glob(opj(ROI_dir, 'GrayMatter.nii.gz'))
+    inputs['fs_method'] = SelectAboveZvalue
+    inputs['fs_arg'] = 2.3
+    inputs['fs_average'] = False
+    inputs['fs_cluster'] = False
+    inputs['cluster_min'] = 10
+    inputs['test_demean'] = False
+    inputs['cv_method'] = StratifiedShuffleSplit
 
     # Run classification on n_cores = len(subjects)
     Parallel(n_jobs=len(subject_dirs)) \
-        (delayed(mvp_classify)(sub_dir, mask_file, iterations, n_test, fs_method,
-                               fs_arg, fs_average, fs_cluster, cluster_min, test_demean) for sub_dir in subject_dirs)
+        (delayed(mvp_classify)(sub_dir, inputs) for sub_dir in subject_dirs)
 
-    args = (mask_file, fs_method, fs_arg, fs_average, fs_cluster, cluster_min,
-            test_demean)
-    average_classification_results(args)
+    average_classification_results(inputs)
