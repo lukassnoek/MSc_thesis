@@ -133,6 +133,13 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
     Lukas Snoek    
     """
 
+    # Unpack
+    mask = inputs['mask']
+    mask_threshold = inputs['mask_threshold']
+    remove_class = inputs['remove_class']
+    grouping = inputs['grouping']
+    norm_method = inputs['norm_method']
+
     # Load mask, create index
     mask_name = os.path.basename(mask)
     mask_vol = nib.load(mask)
@@ -211,14 +218,13 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
         raise ValueError(msg)
 
     if n_stat == 0:
-        raise ValueError('There are no valid COPES/tstats in %s. ' \
-                         'Check whether there is a reg_standard directory!' % os.getcwd())
+        msg = 'There are no valid COPES/tstats for subject %s.' % sub_name
+        raise ValueError(msg)
 
     # Transform to mni space if necessary
     if os.path.basename(stat_dir) == 'stats':
         os.chdir(sub_path)
         print "Transforming COPES to MNI for %s." % sub_name
-        mat_file = opj(sub_path, 'reg', 'example_func2standard.mat')
         ref_file = opj(sub_path, 'reg', 'standard.nii.gz')
         field_file = opj(sub_path, 'reg', 'example_func2standard_warp.nii.gz')
         out_dir = opj(sub_path, 'reg_standard')
@@ -377,19 +383,10 @@ if __name__ == '__main__':
     sys.path.append(script_dir)
     ROI_dir = opj(home, 'ROIs')
 
-    GM_mask = opj(ROI_dir, 'GrayMatter.nii.gz')
-    MNI_mask = opj(ROI_dir, 'MNI152_T1_2mm_brain.nii.gz')
-
     feat_dir = opj(home, 'DecodingEmotions')
     os.chdir(feat_dir)
 
-    mask = GM_mask
     subject_stem = 'HWW'
-    mask_threshold = 0
-    remove_class = []
-    grouping = []
-    norm_method = 'univariate'
-
     data_dir = opj(os.getcwd(), '*%s*' % subject_stem, '*.feat')
     subject_dirs = sorted(glob.glob(data_dir))
     mat_dir = opj(os.getcwd(), 'mvp_mats')
@@ -399,7 +396,15 @@ if __name__ == '__main__':
 
     os.makedirs(mat_dir)
 
+    # Parameters
+    inputs = {}
+    inputs['mask'] = opj(ROI_dir, 'GrayMatter.nii.gz')
+    inputs['mask_threshold'] = 0
+    inputs['remove_class'] = []
+    inputs['grouping'] = []
+    inputs['norm_method'] = 'univariate'
+
     Parallel(n_jobs=len(subject_dirs)) \
-        (delayed(create_subject_mats)(sub_dir, mask, mask_threshold, remove_class, grouping, norm_method) for sub_dir in subject_dirs)
+        (delayed(create_subject_mats)(sub_dir, inputs) for sub_dir in subject_dirs)
 
     merge_runs()
