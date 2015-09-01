@@ -25,7 +25,7 @@ def main(gfeat, gfeat_clust, mask_list, thres):
     """
 
     # Create file
-    filename = '/home/c6386806/Desktop/gfeat_info'
+    filename = opj(os.getcwd(), 'roi_info.csv')
     f = open(filename, 'w')
     f.write('ROI\tk\t Max(X)\tMAX(Y)\tMAX(Z)\tmax. val.\n')
 
@@ -54,11 +54,15 @@ def main(gfeat, gfeat_clust, mask_list, thres):
             # If 0, fill in zeros
             analyze = np.sum(masked>0)
 
-            if analyze:
+            if analyze > 0:
                 mx = np.max(masked[clust[mask_idx]==i])
-                X = np.where(stat==mx)[0]
-                Y = np.where(stat==mx)[1]
-                Z = np.where(stat==mx)[2]
+
+                # Fill in 1 in tmp where the mask == max and get MNI-coordinates
+                tmp = np.zeros(stat.shape)
+                tmp[mask_idx] = stat[mask_idx] == mx
+                X = np.where(tmp == 1)[0]
+                Y = np.where(tmp == 1)[1]
+                Z = np.where(tmp == 1)[2]
                 clustersize = np.sum(masked[clust[mask_idx]==i])
             else:
                 mx = 0
@@ -67,7 +71,8 @@ def main(gfeat, gfeat_clust, mask_list, thres):
                 Z = 0
                 clustersize = 0
 
-            f.write('%s \t %i \t %i \t %i \t %i \t %f \n' % (mask_name, clustersize, X, Y, Z, mx))
+            f.write('%s \t %i \t %i \t %i \t %i \t %f \n' % \
+                    (mask_name, clustersize, X, Y, Z, np.round(mx, 3)))
 
     f.close()
 
@@ -75,6 +80,10 @@ def main(gfeat, gfeat_clust, mask_list, thres):
     df = pd.read_csv(filename, sep='\t', header=False)
     df = df.sort('k', ascending=False)
     print df
+
+    with open(filename, 'w') as f:
+        df.to_csv(f, header=True, sep='\t', index=False)
+
 
 if __name__ == '__main__':
 
