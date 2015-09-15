@@ -33,7 +33,7 @@ def optimize_clustering(sub_dir, inputs):
 
     skip = 0
     for i, (train_idx, test_idx) in enumerate(folds):
-
+        print "iteration %i" % (i+1)
         # Index data (X) and labels (y)
         train_data = mvp.data[train_idx, :]
         test_data = mvp.data[test_idx, :]
@@ -52,15 +52,18 @@ def optimize_clustering(sub_dir, inputs):
             skip = 1
             break
 
+        test_demean_clust = False
         inpt = {'mvp': mvp, 'train_data': train_data,
                 'test_data': test_data, 'fs_arg': fs_arg,
                 'cluster_min': cluster_min, 'selector': selector,
                 'fs_data': fs_data, 'vox_idx': vox_idx,
-                'cluster_cleanup': cluster_cleanup}
+                'cluster_cleanup': cluster_cleanup,
+                'train_labels': train_labels, 'test_demean_clust': test_demean_clust}
 
         # Cluster data & return averaged (if not cluster_cleanup) ftrs
+
         output = clustercorrect_feature_selection(**inpt)
-        train_data, test_data, cl_idx = output
+        train_data, test_data, cl_idx, fs_data, vox_idx = output
 
         if train_data.shape[1] == 0:
             final_score = 0
@@ -123,7 +126,7 @@ if __name__ == '__main__':
 
     # Parameters for classification
     inputs = {}
-    inputs['iterations'] = 100
+    inputs['iterations'] = 200
     inputs['n_test'] = 4
     inputs['fs_method'] = SelectAboveZvalue
     inputs['fs_arg'] = 2.3
@@ -144,7 +147,7 @@ if __name__ == '__main__':
             "Starting analysis because CPU is at %f." % cpu_use
             break
 
-    for fs_arg in np.arange(1, 2.75, 0.25):
+    for fs_arg in np.arange(1, 3, 0.25):
         inputs['fs_arg'] = fs_arg
         for cluster_min in np.arange(10, 311, 25):
             inputs['cluster_min'] = cluster_min
