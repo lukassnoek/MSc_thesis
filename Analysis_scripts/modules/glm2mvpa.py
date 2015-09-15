@@ -111,8 +111,7 @@ def extract_class_vector(sub_path, remove_class):
         print('There is no design.con file for ' + sub_name)
 
 
-def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
-                        grouping, norm_method='nothing'):
+def create_subject_mats(sub_path, inputs):
     """ 
     Creates subject-specific mvp matrices, initializes them as an
     mvp_mat object and saves them as a cpickle file.
@@ -139,6 +138,8 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
     remove_class = inputs['remove_class']
     grouping = inputs['grouping']
     norm_method = inputs['norm_method']
+    transform_res4d = inputs['transform_res4d']
+    scaler = inputs['scaler']
 
     # Load mask, create index
     mask_name = os.path.basename(mask)
@@ -177,22 +178,24 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
 
     print 'Processing ' + os.path.basename(sub_name) + ' ... '
 
-    os.chdir(sub_path)
-    # Transform res4d
-    res4d = opj(sub_path, 'stats', 'res4d.nii.gz')
-    mat_file = opj(sub_path, 'reg', 'example_func2highres.mat')
-    out_file = opj(mat_dir, '%s_res4d.nii.gz' % sub_name)
-    ref_file = opj(sub_path, 'reg', 'standard.nii.gz')
+    if transform_res4d:
+        os.chdir(sub_path)
 
-    apply_xfm = fsl.ApplyXfm()
-    apply_xfm.inputs.in_file = res4d
-    apply_xfm.inputs.in_matrix_file = mat_file
-    apply_xfm.inputs.out_file = out_file
-    apply_xfm.inputs.reference = ref_file
-    apply_xfm.inputs.apply_xfm = True
-    apply_xfm.interp = 'nearestneighbor'
-    _ = apply_xfm.run()
-    os.chdir('..')
+        # Transform res4d
+        res4d = opj(sub_path, 'stats', 'res4d.nii.gz')
+        mat_file = opj(sub_path, 'reg', 'example_func2highres.mat')
+        out_file = opj(mat_dir, '%s_res4d.nii.gz' % sub_name[:-5])
+        ref_file = opj(sub_path, 'reg', 'standard.nii.gz')
+
+        apply_xfm = fsl.ApplyXfm()
+        apply_xfm.inputs.in_file = res4d
+        apply_xfm.inputs.in_matrix_file = mat_file
+        apply_xfm.inputs.out_file = out_file
+        apply_xfm.inputs.reference = ref_file
+        apply_xfm.inputs.apply_xfm = True
+        apply_xfm.interp = 'nearestneighbor'
+        _ = apply_xfm.run()
+        os.chdir('..')
 
     # Generate and sort paths to stat files (COPEs/tstats)
     stat_dir = opj(sub_path, 'reg_standard')
@@ -277,7 +280,14 @@ def create_subject_mats(sub_path, mask, mask_threshold, remove_class,
             mvp_data[i_trial,] = np.divide(mvp_data[i_trial,], var_sq)
 
     mvp_data[np.isnan(mvp_data)] = 0
-    mvp_data = preproc.scale(mvp_data)
+
+    if scaler == 'minmax':
+        sclr = preproc.MinMaxScaler(feature_range=(0, 1))
+        mvp_data = sclr.fit_transform(mvp_data)
+    elif scaler == 'ztrans':
+        mvp_data = preproc.scale(mvp_data)
+    else:
+        raise ValueError('Did not pick an appropriate scaler.')
 
     # Initializing mvp_mat object, which will be saved as a pickle file
     to_save = MVPHeader(mvp_data, sub_name, mask_name, mask_index,
@@ -371,8 +381,8 @@ def merge_runs():
 
         print "Merged subject %s " % merged_name
 
-    os.system('rm %s' % opj(os.getcwd(), 'mvp_mats', '*WIPPM*.cPickle'))
-    os.system('rm %s' % opj(os.getcwd(), 'mvp_mats', '*WIPPM*.hdf5'))
+    #os.system('rm %s' % opj(os.getcwd(), 'mvp_mats', '*WIPPM*.cPickle'))
+    #os.system('rm %s' % opj(os.getcwd(), 'mvp_mats', '*WIPPM*.hdf5'))
 
 if __name__ == '__main__':
 
@@ -403,6 +413,8 @@ if __name__ == '__main__':
     inputs['remove_class'] = []
     inputs['grouping'] = []
     inputs['norm_method'] = 'univariate'
+    inputs['transform_res4d'] = False
+    inputs['scaler'] = 'ztrans' # or: 'ztrans'
 
     Parallel(n_jobs=len(subject_dirs)) \
         (delayed(create_subject_mats)(sub_dir, inputs) for sub_dir in subject_dirs)
