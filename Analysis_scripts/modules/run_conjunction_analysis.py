@@ -56,9 +56,9 @@ def main(zipped_stats, mapping, zval, pval):
 
         mask_list = glob.glob(opj('/home/c6386806/ROIs/Harvard_Oxford_atlas/unilateral', '*nii.gz*'))
 
-        extract_roi_info('thresh_conjunction.nii.gz',
-                         'cluster_mask_conjunction.nii.gz',
-                         mask_list, 30)
+        extract_roi_info(opj(out_dir, 'thresh_conjunction.nii.gz'),
+                         opj(out_dir, 'cluster_mask_conjunction.nii.gz'),
+                         mask_list, 30, per_cluster=True)
 
 
 def sort_stat_list(stat_list):
@@ -85,8 +85,8 @@ if __name__ == '__main__':
     univar_dir = opj(home, 'Desktop', 'DecEmo_uni')
     os.chdir(univar_dir)
 
-    stats1 = glob.glob(opj(univar_dir, 'FSL_ThirdLevel_Zinnen_p001', '*', 'cope1.feat', 'thresh_zstat*.nii.gz'))
-    stats2 = glob.glob(opj(univar_dir, 'FSL_ThirdLevel_HWW_p001.gfeat', '*', 'thresh_zstat*.nii.gz'))
+    stats1 = glob.glob(opj(univar_dir, 'FSL_ThirdLevel_Zinnen_p005', '*', 'cope1.feat', 'thresh_zstat*.nii.gz'))
+    stats2 = glob.glob(opj(univar_dir, 'FSL_ThirdLevel_HWW_p005.gfeat', '*', 'thresh_zstat*.nii.gz'))
 
     stats1 = sort_stat_list(stats1)
     stats2 = sort_stat_list(stats2)
@@ -115,4 +115,4 @@ if __name__ == '__main__':
                'cope9_thresh_zstat2': 'Other_min_Situation',
                'cope10_thresh_zstat2': 'baseline_min_Stimulation'}
 
-    main(zipped_stats, mapping, 3, 0.05)
+    main(zipped_stats, mapping, 2.6, 0.05)
