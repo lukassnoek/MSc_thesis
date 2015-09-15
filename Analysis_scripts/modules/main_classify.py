@@ -96,6 +96,7 @@ def mvp_classify(sub_dir, inputs):
     """
 
     # Unpacking arguments
+    clf = inputs['clf']
     iterations = inputs['iterations']
     n_test = inputs['n_test']
     mask_file = inputs['mask_file']
@@ -114,9 +115,6 @@ def mvp_classify(sub_dir, inputs):
     test_demean_clust = inputs['test_demean_clust']
     test_demean_roi = inputs['test_demean_roi']
     test_demean_gs = inputs['test_demean_gs']
-
-    # Definition of classifier
-    clf = svm.LinearSVC()
 
     # Unpacking subject-data into header and actual data
     header_path, data_path = sub_dir
@@ -160,10 +158,10 @@ def mvp_classify(sub_dir, inputs):
     if fs_average:
         print "Averaging features within ROIs ..."
 
-        av_data = np.zeros((mvp.n_trials, len(masks)))
-        av_idx = np.zeros((mvp.n_features, len(masks)))
+        av_data = np.zeros((mvp.n_trials, len(mask_file)))
+        av_idx = np.zeros((mvp.n_features, len(mask_file)))
 
-        for cMask, roi in enumerate(masks):
+        for cMask, roi in enumerate(mask_file):
             mask_data = nib.load(roi).get_data()
             mask_mask = mask_data > mvp.mask_threshold
             mask_mask = np.reshape(mask_mask, mvp.mask_index.shape)
@@ -272,7 +270,7 @@ def mvp_classify(sub_dir, inputs):
 
                 # Cluster data & return averaged (if not cluster_cleanup) ftrs
                 output = clustercorrect_feature_selection(**inpt)
-                train_data, test_data, cl_idx = output
+                train_data, test_data, cl_idx, fs_data, vox_idx = output
                 cluster_count[i] = train_data.shape[1]
 
             # if working with averaged ROIs, update params appropriately
@@ -408,13 +406,14 @@ def clustercorrect_feature_selection(**input):
     fs[mvp.mask_index] = selector.zvalues
     fs = fs.reshape(mvp.mask_shape)
     img = nib.Nifti1Image(fs, np.eye(4))
-    file_name = opj(os.getcwd(), '%s_ToCluster.nii.gz' % mvp.subject_name)
-    nib.save(img, file_name)
+    in_file_name = opj(os.getcwd(), '%s_ToCluster.nii.gz' % mvp.subject_name)
+    out_file_name = opj(os.getcwd(), '%s_Clustered.nii.gz' % mvp.subject_name)
+    nib.save(img, in_file_name)
 
-    cmd = 'cluster -i %s -t %f -o %s --no_table' % (file_name, fs_arg, file_name)
+    cmd = 'cluster -i %s -t %f -o %s --no_table' % (in_file_name, fs_arg, out_file_name)
     _ = os.system(cmd)
 
-    clustered = nib.load(file_name).get_data()
+    clustered = nib.load(out_file_name).get_data()
     cluster_IDs = sorted(np.unique(clustered), reverse=True)
 
     cl_idx = np.zeros((mvp.data.shape[1], len(cluster_IDs)))
@@ -426,8 +425,12 @@ def clustercorrect_feature_selection(**input):
             break
         else:
             cl_idx[:, j] = idx
+
     cl_idx = cl_idx[:, np.sum(cl_idx, 0) > 0].astype(bool)
     n_clust = cl_idx.shape[1]
+
+    clustered[clustered <= cluster_IDs[n_clust]] = 0
+    nib.save(nib.Nifti1Image(clustered, np.eye(4)), out_file_name)
 
     if test_demean_clust:
         print "demeaning clusters"
@@ -491,7 +494,7 @@ def clustercorrect_feature_selection(**input):
 
 
 def average_classification_results(inputs):
-    """ Averages results across subjects """
+    """ Averages results across subjects"""
     iterations = inputs['iterations']
     n_test = inputs['n_test']
     mask_file = inputs['mask_file']
@@ -564,8 +567,8 @@ def average_classification_results(inputs):
     [os.remove(p) for p in glob.glob('*ToCluster*')]
     [os.remove(p) for p in glob.glob('*averaged*')]
 
-    fs_files = glob.glob('*feature_selection*')
-    vox_files = glob.glob('*voxel_accuracy*')
+    fs_files = glob.glob('*fs.nii.gz')
+    vox_files = glob.glob('*vox.nii.gz')
     zipped_files = zip(fs_files, vox_files)
 
     fs_sum = np.zeros((91, 109, 91))
@@ -601,7 +604,7 @@ if __name__ == '__main__':
     feat_dir = opj(home, 'DecodingEmotions')
     ROI_dir = opj(home, 'ROIs')
     os.chdir(feat_dir)
-    identifier = ''
+    identifier = 'merged'
 
     mvp_dir = opj(os.getcwd(), 'mvp_mats')
     header_dirs = sorted(glob.glob(opj(mvp_dir, '*%s*cPickle' % identifier)))
@@ -610,23 +613,24 @@ if __name__ == '__main__':
 
     # Parameters for classification
     inputs = {}
-    inputs['iterations'] = 10
+    inputs['clf'] = svm.SVC()
+    inputs['iterations'] = 1000
     inputs['n_test'] = 4
     #inputs['mask_file'] = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'bilateral', '*nii.gz*')))
     #inputs['mask_file'] = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'unilateral', '*nii.gz*')))
     inputs['mask_file'] = glob.glob(opj(ROI_dir, 'GrayMatter.nii.gz'))
     inputs['fs_method'] = SelectAboveZvalue
-    inputs['fs_arg'] = 1.5
+    inputs['fs_arg'] = 2.3
     inputs['fs_average'] = False
-    inputs['fs_cluster'] = True
-    inputs['cluster_min'] = 200
+    inputs['fs_cluster'] = False
+    inputs['cluster_min'] = 250
     inputs['cluster_cleanup'] = False
-    inputs['test_demean_clust'] = True
+    inputs['test_demean_clust'] = False
     inputs['test_demean_roi'] = False
     inputs['test_demean_gs'] = False
     inputs['cv_method'] = StratifiedShuffleSplit
     inputs['score_unit'] = 'PPV'
-    inputs['score_method'] = 'iteration-based'  # trial-based
+    inputs['score_method'] = 'trial-based'  # trial-based
     inputs['do_pca'] = False
 
     debug = False
@@ -635,6 +639,4 @@ if __name__ == '__main__':
     # Run classification on n_cores = len(subjects)
     Parallel(n_jobs=n_proc) \
         (delayed(mvp_classify)(sub_dir, inputs) for sub_dir in subject_dirs)
-    sub_dir = subject_dirs[0]
-    # mvp_classify(sub_dir, inputs)
     average_classification_results(inputs)
