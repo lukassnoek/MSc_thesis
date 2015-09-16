@@ -12,6 +12,7 @@ import glob
 import os
 import sys
 import cPickle
+import csv
 from sklearn import svm
 import itertools
 from os.path import join as opj
@@ -121,14 +122,13 @@ def mvp_classify(sub_dir, inputs):
     mvp = cPickle.load(open(header_path))
     gm_data = h5py.File(data_path, 'r')['data'][:]
 
-    if mvp.subject_name == 'HWW_004':
+    if mvp.subject_name == 'HWW_001':
         print "Performing classification analysis with the following params: "
         for key, value in inputs.iteritems():
             print key + ': ' + str(value)
 
     # Perform PCA on data (if specified)
     if do_pca:
-        print "Performing PCA on data ..."
         pca = PCA()
         gm_data = pca.fit_transform(gm_data)
 
@@ -137,51 +137,38 @@ def mvp_classify(sub_dir, inputs):
         msg = "fs_average with one ROI is impossible."
         raise ValueError(msg)
 
-    #if fs_cluster and len(mask_file) > 1 and not test_demean_roi:
-    #    msg = "fs_cluster within individual ROIs is not a good idea."
-    #    raise ValueError(msg)
-
     if fs_cluster and fs_average and not test_demean_roi:
         msg = "fs_average and fs_cluster together doesn't make sense."
         raise ValueError(msg)
 
-    if not fs_cluster and cluster_cleanup:
-        msg = "Cannot cleanup clusters without clustering."
-        raise ValueError(msg)
-
+    # Demean gs (global signal)
     if test_demean_gs:
-        print 'demeaning global signal'
-        for trial in xrange(gm_data.shape[0]):
-            gm_data[trial, :] = gm_data[trial, :] - np.mean(gm_data[trial, :])
+        gm_data = gm_data - np.expand_dims(gm_data.mean(axis=1), axis=1)
 
-    # Start preprocessing data and updating parameters if necessary
+    # Average features within ROIs and return: trials x ROIs matrix (av_data)
     if fs_average:
         print "Averaging features within ROIs ..."
 
-        av_data = np.zeros((mvp.n_trials, len(mask_file)))
+        mvp.data = np.zeros((mvp.n_trials, len(mask_file)))
         av_idx = np.zeros((mvp.n_features, len(mask_file)))
 
         for cMask, roi in enumerate(mask_file):
-            mask_data = nib.load(roi).get_data()
-            mask_mask = mask_data > mvp.mask_threshold
+            mask_mask = nib.load(roi).get_data() > mvp.mask_threshold
             mask_mask = np.reshape(mask_mask, mvp.mask_index.shape)
             mask_overlap = mask_mask.astype(int) + mvp.mask_index.astype(int)
             idx = (mask_overlap == 2)[mvp.mask_index]
 
-            av_data[:, cMask] = np.mean(gm_data[:, idx], axis=1)
-            av_idx[:, cMask] = idx
+            mvp.data[:, cMask] = np.mean(gm_data[:, idx], axis=1)
+            av_idx[:, cMask] = idx.astype(bool)
 
-        av_idx = av_idx.astype(bool)
-        mvp.data = av_data
+        # Update mvp attributes after averaging within ROIs
         mvp.n_features = len(masks)
         mvp.mask_name = 'averaged ROIs'
         mask_file = ['averaged']
-        fs_arg = fs_arg if fs_arg < 2 else 0.5
 
-    # If only one mask is specified, we assume that it is all graymatter
+    # If only one mask is specified, it is assumed to be a whole-brain graymatter mask
     elif len(mask_file) == 1:
         mvp.data = gm_data
-        mvp.submask_index = mvp.mask_index[mvp.mask_index]
         mask_file = ['Graymatter mask']
 
     # If more masks are specified, we will iterate over ROIs
@@ -205,17 +192,13 @@ def mvp_classify(sub_dir, inputs):
             mvp.data = gm_data[:, mvp.submask_index]
             mvp.n_features = np.sum(mvp.submask_index)
 
-            #for trial in xrange(mvp.data.shape[0]):
-            #    mvp.data[trial, :] = mvp.data[trial, :] - np.mean(mvp.data[trial, :])
-
         print "Processing %s for subject %s (%i/%i)" % \
               (mvp.mask_name, mvp.subject_name, cMask + 1, len(mask_file))
 
-        n_features = np.sum(mvp.mask_index)
 
         # Containers for classification data, tracked over iterations
-        fs_data = {'count': np.zeros(n_features),
-                   'score': np.zeros(n_features)}
+        n_features = np.sum(mvp.mask_index)
+        fs_data = {'count': np.zeros(n_features), 'score': np.zeros(n_features)}
         vox_score = np.zeros(n_features)
         conf_mat = np.zeros((mvp.n_class, mvp.n_class))
         feature_count = np.zeros(iterations)
@@ -246,8 +229,8 @@ def mvp_classify(sub_dir, inputs):
             # Index data (X) and labels (y)
             train_data = mvp.data[train_idx, :]
             test_data = mvp.data[test_idx, :]
-            train_labels = np.asarray(mvp.num_labels)[train_idx]
-            test_labels = np.asarray(mvp.num_labels)[test_idx]
+            train_labels = mvp.num_labels[train_idx]
+            test_labels = mvp.num_labels[test_idx]
 
             # selector = GenericUnivariateSelect(f_classif, mode=fs_method, param=fs_arg)
             # Define 'selector' with corresponding arg (for feature selection)
@@ -259,7 +242,10 @@ def mvp_classify(sub_dir, inputs):
             # ROIs, etc.)
             vox_idx = np.zeros(vox_score.shape)
 
-            # Cluster feature selection, if specified
+            ''' Split of analysis into either clustering procedure (fs_cluster),
+            or continuing with ROI-averaged features (fs_average), or with
+            all features from a generic univariate feature selection '''
+
             if fs_cluster:
                 inpt = {'mvp': mvp, 'train_data': train_data, 'train_labels': train_labels,
                         'test_data': test_data, 'fs_arg': fs_arg,
@@ -276,6 +262,9 @@ def mvp_classify(sub_dir, inputs):
             # if working with averaged ROIs, update params appropriately
             # Note: fs_average and fs_cluster are mutually exclusive params
             elif fs_average:
+                train_data = selector.transform(train_data)
+                test_data = selector.transform(test_data)
+
                 for k in xrange(av_idx.shape[1]):
                     if selector.idx[k]:
                         fs_data['score'][av_idx[:, k]] += selector.zvalues[k]
@@ -312,6 +301,7 @@ def mvp_classify(sub_dir, inputs):
         # Normalize by confusion matrix by the sum of rows (TPR) or sum of
         # columns (PPV)
         conf_mat = np.true_divide(conf_mat, np.sum(conf_mat, score_unit))
+
         if score_method == 'iteration-based':
             final_score = np.mean(np.diag(conf_mat))
 
@@ -325,8 +315,7 @@ def mvp_classify(sub_dir, inputs):
             trials_predicted = trials_max[trials_max > 0]
             trials_true = np.array(mvp.num_labels)[trials_max > 0]
             conf_mat2 = confusion_matrix(trials_true, trials_predicted)
-            conf_mat2 = conf_mat2 / np.sum(conf_mat2, score_unit)
-            final_score = np.mean(np.diag(conf_mat2))
+            final_score = np.mean(np.diag(conf_mat2 / np.sum(conf_mat2, score_unit)))
 
         # Calculate mean feature selection score and set NaN to 0
         fs_data['score'] = np.true_divide(fs_data['score'], fs_data['count'])
@@ -355,6 +344,7 @@ def mvp_classify(sub_dir, inputs):
               'mask': mvp.mask_name,
               'score': np.round(final_score, 3),
               'fs_count': np.round(np.mean(feature_count), 3),
+              'fs_std': np.round(np.std(feature_count), 3),
               'fs_prop': np.round(np.mean(feature_prop), 3)}
 
         if fs_cluster:
@@ -390,6 +380,7 @@ def clustercorrect_feature_selection(**input):
         vox_idx (ndarray): updated voxel selection indices)
     """
 
+    # Unpacking arguments
     mvp = input['mvp']
     train_data = input['train_data']
     train_labels = input['train_labels']
@@ -402,22 +393,30 @@ def clustercorrect_feature_selection(**input):
     cluster_cleanup = input['cluster_cleanup']
     test_demean_clust = input['test_demean_clust']
 
+    # Create fs: vector of length mask_shape with univariate feature weights
     fs = np.zeros(mvp.mask_shape).ravel()
     fs[mvp.mask_index] = selector.zvalues
     fs = fs.reshape(mvp.mask_shape)
+
+    # Write to nifti
     img = nib.Nifti1Image(fs, np.eye(4))
     in_file_name = opj(os.getcwd(), '%s_ToCluster.nii.gz' % mvp.subject_name)
     out_file_name = opj(os.getcwd(), '%s_Clustered.nii.gz' % mvp.subject_name)
     nib.save(img, in_file_name)
 
+    # Perform clustering using FSL's cluster command
+    # http://fsl.fmrib.ox.ac.uk/fsl/fslwiki/Cluster
     cmd = 'cluster -i %s -t %f -o %s --no_table' % (in_file_name, fs_arg, out_file_name)
     _ = os.system(cmd)
 
+    # Load in clustered data
     clustered = nib.load(out_file_name).get_data()
     cluster_IDs = sorted(np.unique(clustered), reverse=True)
 
+    # cl_idx holds indices per cluster
     cl_idx = np.zeros((mvp.data.shape[1], len(cluster_IDs)))
 
+    # Update cl_idx until cluster-size < cluster_min
     for j, clt in enumerate(cluster_IDs):
         idx = (clustered == clt).ravel()[mvp.mask_index]
 
@@ -426,12 +425,14 @@ def clustercorrect_feature_selection(**input):
         else:
             cl_idx[:, j] = idx
 
+    # Trim zeros from cl_idx
     cl_idx = cl_idx[:, np.sum(cl_idx, 0) > 0].astype(bool)
     n_clust = cl_idx.shape[1]
 
-    clustered[clustered <= cluster_IDs[n_clust]] = 0
-    nib.save(nib.Nifti1Image(clustered, np.eye(4)), out_file_name)
+    # clustered[clustered <= cluster_IDs[n_clust]] = 0
+    # nib.save(nib.Nifti1Image(clustered, np.eye(4)), out_file_name)
 
+    # Here, clusters are demeaned
     if test_demean_clust:
         print "demeaning clusters"
         allclust_idx = np.sum(cl_idx, 1).astype(bool)
@@ -447,14 +448,6 @@ def clustercorrect_feature_selection(**input):
                 line = w[0]*xi+w[1] # regression line
                 train_data[t,idx] = np.sort(train_data[t,idx]) - np.sort(train_data[t,idx])*line
                 train_data[t,idx] = train_data[t,idx]-np.mean(train_data[t,idx])
-
-            #for t in xrange(test_data.shape[0]):
-                #weighting = np.arange(0, 1, np.sum(idx))
-                #xi = np.arange(0,np.sum(idx),1)
-                #A = np.array([xi, np.ones(np.sum(idx))])
-                #w = np.linalg.lstsq(A.T,test_data[t,idx])[0] # obtaining the parameters
-                #test_data[t,idx] = np.sort(test_data[t,idx]) - np.sort(test_data[t,idx])*line
-                #test_data[t,idx] = test_data[t,idx]-np.mean(test_data[t,idx])
 
         train_data = train_data[:, allclust_idx]
         test_data = test_data[:, allclust_idx]
@@ -495,37 +488,13 @@ def clustercorrect_feature_selection(**input):
 
 def average_classification_results(inputs):
     """ Averages results across subjects"""
-    iterations = inputs['iterations']
-    n_test = inputs['n_test']
-    mask_file = inputs['mask_file']
-    fs_method = inputs['fs_method']
-    fs_arg = inputs['fs_arg']
-    fs_average = inputs['fs_average']
-    fs_cluster = inputs['fs_cluster']
-    cluster_min = inputs['cluster_min']
-    test_demean_clust = inputs['test_demean_clust']
-    cv_method = inputs['cv_method']
 
     # Create header
-    fid = open('analysis_parameters', 'w')
-    fid.write('Classification run with the following parameters: \n \n')
-
-    if len(mask_file) == 1:
-        fid.write('Mask \t %s \n' % mask_file)
-
-    fid.write('Iterations: \t %s \n' % iterations)
-    fid.write('CV_method: \t %s \n' % cv_method.__name__)
-    fid.write('N-test: \t %s \n' % n_test)
-    fid.write('fs_method: \t %s \n' % fs_method.__name__)
-    fid.write('fs_arg: \t %f \n' % fs_arg)
-    fid.write('fs_average: \t %s \n' % fs_average)
-    fid.write('fs_cluster: \t %s \n' % fs_cluster)
-
-    if fs_cluster:
-        fid.write('cluster_min: \t %i \n' % cluster_min)
-
-    fid.write('test_demean_clust: \t %s \n \n' % test_demean_clust)
-    fid.close()
+    with open('analysis_parameters', 'w') as fid:
+        fid.write('Classification run with the following parameters: \n \n')
+        writer = csv.writer(fid, delimiter='\t')
+        writer.writerows(inputs.items())
+        fid.write('\n')
 
     to_load = glob.glob('*results_HWW*.csv')
 
@@ -540,6 +509,7 @@ def average_classification_results(inputs):
     df_list = []
     masks = np.unique(dfs['mask'])
 
+    # If we've iterated over multiple ROIs, report average ROI-score
     if len(masks) > 1:
 
         for mask in masks:
@@ -554,17 +524,18 @@ def average_classification_results(inputs):
         filename = 'results_per_mask.csv'
         os.rename('analysis_parameters', filename)
 
+    # If there was only one mask, report scores per subject
     else:
         av_score = np.mean(dfs['score']).round(3)
 
         with open('analysis_parameters', 'a') as f:
-            dfs.to_csv(f, header=True, sep='\t', index=False)
+            dfs.to_csv(f, header=True, sep='\t')
             f.write('\n Average score: \t %f' % av_score)
 
         filename = 'results_per_sub.csv'
         os.rename('analysis_parameters', filename)
 
-    [os.remove(p) for p in glob.glob('*ToCluster*')]
+    [os.remove(p) for p in glob.glob('*Clustered*')]
     [os.remove(p) for p in glob.glob('*averaged*')]
 
     fs_files = glob.glob('*fs.nii.gz')
@@ -613,8 +584,8 @@ if __name__ == '__main__':
 
     # Parameters for classification
     inputs = {}
-    inputs['clf'] = svm.SVC()
-    inputs['iterations'] = 1000
+    inputs['clf'] = svm.SVC(kernel='linear')
+    inputs['iterations'] = 10000
     inputs['n_test'] = 4
     #inputs['mask_file'] = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'bilateral', '*nii.gz*')))
     #inputs['mask_file'] = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'unilateral', '*nii.gz*')))
@@ -623,17 +594,17 @@ if __name__ == '__main__':
     inputs['fs_arg'] = 2.3
     inputs['fs_average'] = False
     inputs['fs_cluster'] = False
-    inputs['cluster_min'] = 250
+    inputs['cluster_min'] = 185
     inputs['cluster_cleanup'] = False
     inputs['test_demean_clust'] = False
     inputs['test_demean_roi'] = False
-    inputs['test_demean_gs'] = False
+    inputs['test_demean_gs'] = True
     inputs['cv_method'] = StratifiedShuffleSplit
     inputs['score_unit'] = 'PPV'
     inputs['score_method'] = 'trial-based'  # trial-based
     inputs['do_pca'] = False
 
-    debug = False
+    debug = True
     n_proc = 1 if debug else len(subject_dirs)
 
     # Run classification on n_cores = len(subjects)

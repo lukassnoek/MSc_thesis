@@ -368,7 +368,7 @@ def merge_runs():
         to_save = MVPHeader(merged_data, merged_name, merged_mask_name,
                             merged_mask_index, merged_mask_shape,
                             merged_mask_threshold, merged_class_labels,
-                            merged_num_labels, merged_grouping)
+                            np.asarray(merged_num_labels), merged_grouping)
 
         fn = opj(os.getcwd(), 'mvp_mats', merged_name + '_header_merged.cPickle')
         with open(fn, 'wb') as handle:
