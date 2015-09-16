@@ -5,27 +5,26 @@ Main classification module
 Lukas Snoek
 """
 from __future__ import division
-
-__author__ = "Lukas Snoek"
-
 import glob
 import os
 import sys
 import cPickle
 import csv
-from sklearn import svm
-import itertools
-from os.path import join as opj
-
+import pandas as pd
+import itertools as itls
 import numpy as np
 import nibabel as nib
 import h5py
+
+from os.path import join as opj
+from sklearn import svm
 from sklearn.cross_validation import StratifiedShuffleSplit, StratifiedKFold
-import pandas as pd
 from sklearn.base import TransformerMixin
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score
 from sklearn.decomposition import PCA
-from scipy.signal import gaussian
+
+__author__ = "Lukas Snoek"
+
 
 class SelectAboveZvalue(TransformerMixin):
     """ Selects features based on normalized differentation scores above cutoff
@@ -66,7 +65,7 @@ class SelectAboveZvalue(TransformerMixin):
             av_patterns[i, :] = np.mean(X[y == np.unique(y)[i], :], axis=0)
 
         # Create difference vectors, z-score standardization, absolute
-        comb = list(itertools.combinations(range(1, n_class + 1), 2))
+        comb = list(itls.combinations(range(1, n_class + 1), 2))
         diff_patterns = np.zeros((len(comb), n_features))
         for i, cb in enumerate(comb):
             x = av_patterns[cb[0] - 1] - av_patterns[cb[1] - 1, :]
@@ -108,7 +107,6 @@ def mvp_classify(sub_dir, inputs):
     cluster_min = inputs['cluster_min']
     cluster_cleanup = inputs['cluster_cleanup']
     cv_method = inputs['cv_method']
-    score_unit = 0 if inputs['score_unit'] == 'TPR' else 1
     score_method = inputs['score_method']
     do_pca = inputs['do_pca']
 
@@ -162,7 +160,7 @@ def mvp_classify(sub_dir, inputs):
             av_idx[:, cMask] = idx.astype(bool)
 
         # Update mvp attributes after averaging within ROIs
-        mvp.n_features = len(masks)
+        mvp.n_features = len(mask_file)
         mvp.mask_name = 'averaged ROIs'
         mask_file = ['averaged']
 
@@ -204,9 +202,13 @@ def mvp_classify(sub_dir, inputs):
         feature_count = np.zeros(iterations)
         feature_prop = np.zeros(iterations)
 
-        # Container with class-assignments per trial
-        if score_method == 'trial-based':
+        # Container with class-assignments per trial / score metrics
+        if score_method == 'trial_based':
             trials_score = np.zeros((mvp.n_trials, mvp.n_class))
+        elif score_method == 'iteration_based':
+            precision = np.zeros(iterations)
+            accuracy = np.zeros(iterations)
+            recall = np.zeros(iterations)
 
         # If clustering of features, create cluster_count variable to track
         if fs_cluster:
@@ -284,11 +286,12 @@ def mvp_classify(sub_dir, inputs):
             clf.fit(train_data, train_labels)
             test_pred = clf.predict(test_data)
 
-            # Update confusion matrix
-            conf_mat += confusion_matrix(test_labels, test_pred)
-
-            # If trial-based scoring, update trial_score with class-assignments
-            if score_method == 'trial-based':
+            # Update scores
+            if score_method == 'iteration_based':
+                precision[i] = precision_score(test_labels, test_pred, average='macro')
+                recall[i] = recall_score(test_labels, test_pred, average='macro')
+                accuracy[i] = accuracy_score(test_labels, test_pred)
+            elif score_method == 'trial_based':
                 trials_score[test_idx, (test_pred - 1).astype(int)] += 1
 
             # Update score per voxel and feature descriptive statistics
@@ -298,24 +301,27 @@ def mvp_classify(sub_dir, inputs):
 
         ### END iteration loop >> write out results of mask/ROI ###
 
-        # Normalize by confusion matrix by the sum of rows (TPR) or sum of
-        # columns (PPV)
-        conf_mat = np.true_divide(conf_mat, np.sum(conf_mat, score_unit))
-
-        if score_method == 'iteration-based':
-            final_score = np.mean(np.diag(conf_mat))
+        if score_method == 'iteration_based':
+            precision = np.round(np.mean(precision), 3)
+            recall = np.round(np.mean(recall), 3)
+            accuracy = np.round(np.mean(recall), 3)
 
         # If trial-based, trial classification is based on the max. of class-
         # assignments (if trial x is classified once as A, once as B, and twice
         # as C, it is classified as C).
-        elif score_method == 'trial-based':
+        elif score_method == 'trial_based':
             filter_trials = np.sum(trials_score, 1) == 0
             trials_max = np.argmax(trials_score, 1) + 1
             trials_max[filter_trials] = 0
             trials_predicted = trials_max[trials_max > 0]
             trials_true = np.array(mvp.num_labels)[trials_max > 0]
             conf_mat2 = confusion_matrix(trials_true, trials_predicted)
-            final_score = np.mean(np.diag(conf_mat2 / np.sum(conf_mat2, score_unit)))
+            np.save('confmat_%s' % mvp.subject_name, conf_mat2)
+
+            # Calculate scores
+            precision = precision_score(trials_true, trials_predicted, average='macro')
+            recall = recall_score(trials_true, trials_predicted, average='macro')
+            accuracy = accuracy_score(trials_true, trials_predicted)
 
         # Calculate mean feature selection score and set NaN to 0
         fs_data['score'] = np.true_divide(fs_data['score'], fs_data['count'])
@@ -342,7 +348,9 @@ def mvp_classify(sub_dir, inputs):
         # Write out classification results as pandas dataframe
         df = {'sub_name': mvp.subject_name,
               'mask': mvp.mask_name,
-              'score': np.round(final_score, 3),
+              'accuracy': np.round(accuracy, 3),
+              'precision': np.round(precision, 3),
+              'recall': np.round(recall, 3),
               'fs_count': np.round(np.mean(feature_count), 3),
               'fs_std': np.round(np.std(feature_count), 3),
               'fs_prop': np.round(np.mean(feature_prop), 3)}
@@ -442,7 +450,7 @@ def clustercorrect_feature_selection(**input):
 
             for t in xrange(train_data.shape[0]):
                 #weighting = np.arange(0, 1, np.sum(idx))**2
-                xi = np.arange(0,np.sum(idx),1)
+                xi = np.arange(0, np.sum(idx),1)
                 A = np.array([xi, np.ones(np.sum(idx))])
                 w = np.linalg.lstsq(A.T,train_data[t,idx])[0] # obtaining the parameters
                 line = w[0]*xi+w[1] # regression line
@@ -500,7 +508,7 @@ def average_classification_results(inputs):
 
     dfs = []
     for sub in to_load:
-        dfs.append(pd.DataFrame.from_csv(sub, sep='\t'))
+        dfs.append(pd.DataFrame(pd.read_csv(sub, sep='\t', index_col=False)))
 
     dfs = pd.concat(dfs)
     [os.remove(p) for p in glob.glob('*.csv')]
@@ -514,7 +522,7 @@ def average_classification_results(inputs):
 
         for mask in masks:
             to_write['mask'] = mask
-            to_write['score'] = np.mean(dfs['score'][dfs['mask'] == mask])
+            to_write['accuracy'] = np.mean(dfs['accuracy'][dfs['mask'] == mask])
             df_list.append(pd.DataFrame(to_write, index=[0]))
 
         df_list = pd.concat(df_list)
@@ -526,11 +534,11 @@ def average_classification_results(inputs):
 
     # If there was only one mask, report scores per subject
     else:
-        av_score = np.mean(dfs['score']).round(3)
+        means = np.round(dfs.mean(axis=0), 3)
+        dfs = dfs.append(means, ignore_index=True)
 
         with open('analysis_parameters', 'a') as f:
-            dfs.to_csv(f, header=True, sep='\t')
-            f.write('\n Average score: \t %f' % av_score)
+            dfs.to_csv(f, header=True, sep='\t', index=False)
 
         filename = 'results_per_sub.csv'
         os.rename('analysis_parameters', filename)
@@ -561,6 +569,13 @@ def average_classification_results(inputs):
     file_name = opj(os.getcwd(), 'averaged_voxel_accuracy.nii.gz')
     nib.save(img, file_name)
 
+    confmats = glob.glob('*HWW*npy')
+    all_cms = np.zeros((len(confmats), 3, 3))
+    for i, confmat in enumerate(confmats):
+        all_cms[i,:,:] = np.load(confmat)
+
+    np.save('all_confmats', all_cms)
+    [os.remove(p) for p in glob.glob('*HWW*.npy')]
     os.system('cat %s' % filename)
 
 
@@ -568,11 +583,11 @@ if __name__ == '__main__':
     sys.path.append('/home/c6386806/LOCAL/Analysis_scripts')
 
     from joblib import Parallel, delayed
-    from modules.glm2mvpa import MVPHeader
+    from glm2mvpa import MVPHeader
 
     # Information about which data to use
     home = os.path.expanduser('~')
-    feat_dir = opj(home, 'DecodingEmotions')
+    feat_dir = opj(home, 'DecodingEmotions_validation')
     ROI_dir = opj(home, 'ROIs')
     os.chdir(feat_dir)
     identifier = 'merged'
@@ -585,7 +600,7 @@ if __name__ == '__main__':
     # Parameters for classification
     inputs = {}
     inputs['clf'] = svm.SVC(kernel='linear')
-    inputs['iterations'] = 10000
+    inputs['iterations'] = 5
     inputs['n_test'] = 4
     #inputs['mask_file'] = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'bilateral', '*nii.gz*')))
     #inputs['mask_file'] = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'unilateral', '*nii.gz*')))
@@ -600,11 +615,10 @@ if __name__ == '__main__':
     inputs['test_demean_roi'] = False
     inputs['test_demean_gs'] = True
     inputs['cv_method'] = StratifiedShuffleSplit
-    inputs['score_unit'] = 'PPV'
-    inputs['score_method'] = 'trial-based'  # trial-based
+    inputs['score_method'] = 'iteration_based'  # trial_based
     inputs['do_pca'] = False
 
-    debug = True
+    debug = False
     n_proc = 1 if debug else len(subject_dirs)
 
     # Run classification on n_cores = len(subjects)
