@@ -1,5 +1,6 @@
 __author__ = 'lukas'
 
+from sklearn.metrics import accuracy_score
 
 def optimize_clustering(sub_dir, inputs):
     iterations = inputs['iterations']
@@ -7,11 +8,10 @@ def optimize_clustering(sub_dir, inputs):
     fs_method = inputs['fs_method']
     fs_arg = inputs['fs_arg']
     cluster_min = inputs['cluster_min']
-    score_unit = 0 if inputs['score_unit'] == 'TPR' else 1
 
     print "performing analysis with zval = %f and cluster_min = %i" % (fs_arg, cluster_min)
     # Definition of classifier
-    clf = svm.LinearSVC()
+    clf = svm.SVC(kernel='linear')
 
     # Unpacking subject-data into header and actual data
     header_path, data_path = sub_dir
@@ -32,6 +32,8 @@ def optimize_clustering(sub_dir, inputs):
                       random_state=0)
 
     skip = 0
+    accuracy = np.zeros(iterations)
+
     for i, (train_idx, test_idx) in enumerate(folds):
         print "iteration %i" % (i+1)
         # Index data (X) and labels (y)
@@ -77,11 +79,10 @@ def optimize_clustering(sub_dir, inputs):
 
         clf.fit(train_data, train_labels)
         test_pred = clf.predict(test_data)
-        conf_mat += confusion_matrix(test_labels, test_pred)
+        accuracy[i] = accuracy_score(test_labels, test_pred)
 
     if skip == 0:
-        conf_mat = np.true_divide(conf_mat, np.sum(conf_mat, score_unit))
-        final_score = np.mean(np.diag(conf_mat))
+        final_score = np.mean(accuracy)
         fs_success = True
         cluster_success = True
 
@@ -106,6 +107,7 @@ if __name__ == '__main__':
     from os.path import join as opj
     from sklearn.cross_validation import StratifiedShuffleSplit as sss
     import psutil
+    import numpy as np
     sys.path.append('/home/c6386806/LOCAL/Analysis_scripts')
 
     from joblib import Parallel, delayed
@@ -117,7 +119,7 @@ if __name__ == '__main__':
     feat_dir = opj(home, 'DecodingEmotions')
     ROI_dir = opj(home, 'ROIs')
     os.chdir(feat_dir)
-    identifier = ''
+    identifier = 'merged'
 
     mvp_dir = opj(os.getcwd(), 'mvp_mats')
     header_dirs = sorted(glob.glob(opj(mvp_dir, '*%s*cPickle' % identifier)))
@@ -126,30 +128,16 @@ if __name__ == '__main__':
 
     # Parameters for classification
     inputs = {}
-    inputs['iterations'] = 200
+    inputs['iterations'] = 250
     inputs['n_test'] = 4
     inputs['fs_method'] = SelectAboveZvalue
-    inputs['fs_arg'] = 2.3
-    inputs['cluster_min'] = 10
-    inputs['score_unit'] = 'PPV'
-    inputs['do_pca'] = False
 
     debug = False
     n_proc = 1 if debug else len(subject_dirs)
 
-    while True:
-        cpu_use = psutil.cpu_percent()
-
-        if cpu_use > 50:
-            print "CPU utilization at %f percent." % cpu_use
-            time.sleep(10)
-        else:
-            "Starting analysis because CPU is at %f." % cpu_use
-            break
-
-    for fs_arg in np.arange(1, 3, 0.25):
+    for fs_arg in np.arange(1, 3, 0.1):
         inputs['fs_arg'] = fs_arg
-        for cluster_min in np.arange(10, 311, 25):
+        for cluster_min in np.arange(10, 310, 10):
             inputs['cluster_min'] = cluster_min
             Parallel(n_jobs=n_proc) \
                 (delayed(optimize_clustering)(sub_dir, inputs) for sub_dir in subject_dirs)
