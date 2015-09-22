@@ -1,35 +1,36 @@
-Classification run with the following parameters: 
- 
-cv_method	<class 'sklearn.cross_validation.StratifiedShuffleSplit'>
-cluster_min	185
-cluster_cleanup	False
-fs_method	<class '__main__.SelectAboveZvalue'>
-fs_arg	2.3
-test_demean_roi	False
-clf	"SVC(C=1.0, cache_size=200, class_weight=None, coef0=0.0, degree=3, gamma=0.0,
+Classification run with the following parameters: ,,,,,,,,
+ ,,,,,,,,
+cv_method,<class 'sklearn.cross_validation.StratifiedShuffleSplit'>,,,,,,,
+cluster_min,185,,,,,,,
+cluster_cleanup,False,,,,,,,
+fs_method,<class '__main__.SelectAboveZvalue'>,,,,,,,
+fs_arg,2.3,,,,,,,
+test_demean_roi,False,,,,,,,
+clf,"SVC(C=1.0, cache_size=200, class_weight=None, coef0=0.0, degree=3, gamma=0.0,
   kernel='linear', max_iter=-1, probability=False, random_state=None,
-  shrinking=True, tol=0.001, verbose=False)"
-fs_average	False
-n_test	4
-fs_cluster	False
-do_pca	False
-score_method	trial_based
-test_demean_gs	False
-iterations	10000
-mask_file	['/home/c6386806/ROIs/GrayMatter.nii.gz']
-test_demean_clust	False
-
-accuracy	fs_count	fs_prop	fs_std	mask	precision	recall	sub_name
-0.583	955.712	0.004	164.432	GrayMatter.nii.gz	0.596	0.583	HWW_005
-0.458	1571.207	0.006	222.295	GrayMatter.nii.gz	0.462	0.458	HWW_006
-0.533	819.154	0.003	168.905	GrayMatter.nii.gz	0.535	0.533	HWW_003
-0.392	532.656	0.002	154.759	GrayMatter.nii.gz	0.402	0.392	HWW_013
-0.625	1728.462	0.006	214.107	GrayMatter.nii.gz	0.634	0.625	HWW_010
-0.667	295.29	0.001	86.483	GrayMatter.nii.gz	0.683	0.667	HWW_008
-0.625	1387.719	0.005	225.994	GrayMatter.nii.gz	0.628	0.625	HWW_004
-0.392	579.258	0.002	164.502	GrayMatter.nii.gz	0.407	0.392	HWW_009
-0.775	1062.435	0.004	137.492	GrayMatter.nii.gz	0.774	0.775	HWW_002
-0.717	2299.678	0.009	394.615	GrayMatter.nii.gz	0.722	0.717	HWW_012
-0.708	654.57	0.002	151.439	GrayMatter.nii.gz	0.709	0.708	HWW_011
-0.708	623.141	0.002	147.991	GrayMatter.nii.gz	0.714	0.708	HWW_007
-0.599	1042.44	0.004	186.084		0.606	0.599	
+  shrinking=True, tol=0.001, verbose=False)",,,,,,,
+fs_average,False,,,,,,,
+n_test,4,,,,,,,
+fs_cluster,False,,,,,,,
+do_pca,False,,,,,,,
+score_method,trial_based,,,,,,,
+test_demean_gs,False,,,,,,,
+save_corrs,True,,,,,,,
+iterations,10000,,,,,,,
+mask_file,['/home/c6386806/ROIs/GrayMatter.nii.gz'],,,,,,,
+test_demean_clust,False,,,,,,,
+,,,,,,,,
+accuracy,corr_vox,fs_count,fs_prop,fs_std,mask,precision,recall,sub_name
+0.583,0.535,955.712,0.004,164.432,GrayMatter.nii.gz,0.596,0.583,HWW_005
+0.458,0.193,1571.207,0.006,222.295,GrayMatter.nii.gz,0.462,0.458,HWW_006
+0.533,0.458,819.154,0.003,168.905,GrayMatter.nii.gz,0.535,0.533,HWW_003
+0.392,0.276,532.656,0.002,154.759,GrayMatter.nii.gz,0.402,0.392,HWW_013
+0.625,0.302,1728.462,0.006,214.107,GrayMatter.nii.gz,0.634,0.625,HWW_010
+0.667,0.225,295.29,0.001,86.483,GrayMatter.nii.gz,0.683,0.667,HWW_008
+0.625,0.461,1387.719,0.005,225.994,GrayMatter.nii.gz,0.628,0.625,HWW_004
+0.392,0.113,579.258,0.002,164.502,GrayMatter.nii.gz,0.407,0.392,HWW_009
+0.775,0.7,1062.435,0.004,137.492,GrayMatter.nii.gz,0.774,0.775,HWW_002
+0.717,0.222,2299.678,0.009,394.615,GrayMatter.nii.gz,0.722,0.717,HWW_012
+0.708,0.318,654.57,0.002,151.439,GrayMatter.nii.gz,0.709,0.708,HWW_011
+0.708,0.581,623.141,0.002,147.991,GrayMatter.nii.gz,0.714,0.708,HWW_007
+0.599,0.365,1042.44,0.004,186.084,,0.606,0.599,
