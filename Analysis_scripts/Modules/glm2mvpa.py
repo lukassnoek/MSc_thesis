@@ -393,10 +393,10 @@ if __name__ == '__main__':
     sys.path.append(script_dir)
     ROI_dir = opj(home, 'ROIs')
 
-    feat_dir = opj(home, 'DecodingEmotions_validation')
+    feat_dir = opj(home, 'DynamicAffect_MV', 'FSL_FirstLevel_Posttest')
     os.chdir(feat_dir)
 
-    subject_stem = 'HWW'
+    subject_stem = 'da'
     data_dir = opj(os.getcwd(), '*%s*' % subject_stem, '*.feat')
     subject_dirs = sorted(glob.glob(data_dir))
     mat_dir = opj(os.getcwd(), 'mvp_mats')
@@ -410,8 +410,8 @@ if __name__ == '__main__':
     inputs = {}
     inputs['mask'] = opj(ROI_dir, 'GrayMatter.nii.gz')
     inputs['mask_threshold'] = 0
-    inputs['remove_class'] = []
-    inputs['grouping'] = []
+    inputs['remove_class'] = ['eval']
+    inputs['grouping'] = ['loc','char']
     inputs['norm_method'] = 'univariate'
     inputs['transform_res4d'] = False
     inputs['scaler'] = 'ztrans' # or: 'ztrans'
@@ -419,4 +419,4 @@ if __name__ == '__main__':
     Parallel(n_jobs=len(subject_dirs)) \
         (delayed(create_subject_mats)(sub_dir, inputs) for sub_dir in subject_dirs)
 
-    merge_runs()
+    #merge_runs()

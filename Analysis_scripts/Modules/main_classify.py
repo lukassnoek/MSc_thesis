@@ -17,7 +17,7 @@ import numpy as np
 import nibabel as nib
 import h5py
 import progressbar as pbar
-
+import datetime
 from os.path import join as opj
 from sklearn import svm
 from sklearn.cross_validation import StratifiedShuffleSplit
@@ -109,16 +109,12 @@ def mvp_classify(sub_dir, inputs):
     fs_arg = inputs['fs_arg']
     fs_doubledip = inputs['fs_doubledip']
     fs_average = inputs['fs_average']
-    fs_cluster = inputs['fs_cluster']
-    cluster_min = inputs['cluster_min']
-    cluster_cleanup = inputs['cluster_cleanup']
+    cluster_args = inputs['cluster_args']
+    pca_args = inputs['pca_args']
     cv_method = inputs['cv_method']
     score_method = inputs['score_method']
-    do_pca = inputs['do_pca']
-    save_corrs = inputs['save_corrs']
-
-    # De-meaning procedures
-    test_demean_clust = inputs['test_demean_clust']
+    save_feat_corrs = inputs['save_feat_corrs']
+    subject_timer = inputs['subject_timer']
     demean_patterns = inputs['demean_patterns']
     average_patterns = inputs['average_patterns']
 
@@ -135,15 +131,6 @@ def mvp_classify(sub_dir, inputs):
         filt = gaussian_filter(tmp.reshape(mvp.mask_shape), 3)
         gm_data[trial, :] = filt.ravel()[mvp.mask_index].ravel()
     '''
-
-    # Check feasibility of parameter settings
-    if fs_average and len(mask_file) == 1:
-        msg = "fs_average with one ROI is impossible."
-        raise ValueError(msg)
-
-    if fs_cluster and fs_average:
-        msg = "fs_average and fs_cluster together doesn't make sense."
-        raise ValueError(msg)
 
     # Average features within ROIs and return: trials x ROIs matrix (av_data)
     if fs_average:
@@ -166,18 +153,20 @@ def mvp_classify(sub_dir, inputs):
         mvp.mask_name = 'averaged ROIs'
         mask_file = ['averaged']
 
-    # If only one mask is specified, it is assumed to be a whole-brain graymatter mask
+    # If only one mask is specified, it is assumed to be a whole-brain
+    # graymatter mask, which is by default contained in gm_data
     elif len(mask_file) == 1:
         mvp.data = gm_data
         mask_file = ['Graymatter mask']
 
     # If more masks are specified, we will iterate over ROIs
     else:
-        pass #"Iterating over multiple ROIs ..."
+        pass
 
-    df_list = []  # stores info per mask
+    # df_list stores results per mask, which is later concatenated
+    df_list = []
 
-    # Start loop over ROIs/masks
+    # Loop over masks; if only one mask, loop-size = 1
     for cMask, roi in enumerate(mask_file):
 
         # Index data with roi (mask)
@@ -193,12 +182,13 @@ def mvp_classify(sub_dir, inputs):
             mvp.n_features = np.sum(mvp.submask_index)
 
         # Containers for classification data, tracked over iterations
+        # idea for future implementation: create pandas dataframe
         n_features = np.sum(mvp.mask_index)
         fs_data = {'count': np.zeros(n_features), 'score': np.zeros(n_features)}
         vox_score = np.zeros(n_features)
         feature_count = np.zeros(iterations)
-        feature_prop = np.zeros(iterations)
         correlations = np.zeros(iterations)
+        feats_per_clust = np.zeros(iterations)
 
         # Container with class-assignments per trial / score metrics
         if score_method == 'trial_based':
@@ -208,10 +198,6 @@ def mvp_classify(sub_dir, inputs):
             accuracy = np.zeros(iterations)
             recall = np.zeros(iterations)
 
-        # If clustering of features, create cluster_count variable to track
-        if fs_cluster:
-            cluster_count = np.zeros(iterations)
-
         # Define cross-validation method with appropriate params
         if cv_method.__name__ == 'StratifiedShuffleSplit':
             folds = cv_method(mvp.num_labels, iterations, n_test * mvp.n_class,
@@ -219,7 +205,8 @@ def mvp_classify(sub_dir, inputs):
         else:
             folds = cv_method(mvp.num_labels, iterations, random_state=0)
 
-        if mvp.subject_name == 'HWW_012':
+        # Create progressbar for ONE subject (specified by subject_timer)
+        if mvp.subject_name == subject_timer:
             print "\nProcessing mask: %s (%i out of %i)" % \
                   (mvp.mask_name, cMask + 1, len(mask_file))
 
@@ -231,6 +218,7 @@ def mvp_classify(sub_dir, inputs):
         """ START CROSS-VALIDATION LOOP """
         for i, (train_idx, test_idx) in enumerate(folds):
 
+            # Update progressbar
             if mvp.subject_name == 'HWW_012':
                 pb.update(i+1)
 
@@ -238,6 +226,7 @@ def mvp_classify(sub_dir, inputs):
             test_idx = np.array([1, 45, 90])
             train_idx = np.delete(np.array(range(len(mvp.num_labels))), test_idx)
             """
+
             # Index data (X) and labels (y); num_labels has range (1, 2, 3)
             train_data = mvp.data[train_idx, :]
             test_data = mvp.data[test_idx, :]
@@ -250,12 +239,12 @@ def mvp_classify(sub_dir, inputs):
             vox_idx = np.zeros(vox_score.shape)
 
             if fs_arg == -1 and average_patterns:
-                # skip to averaging+fitting
+                # No feature selection; instead, average all features
                 fs_data['score'] += 1
                 fs_data['count'] += 1
                 vox_idx += 1
             else:
-                # Define 'selector' with corresponding arg (for feature selection)
+                # Univariate feature selection using selector
                 selector = fs_method(fs_arg)
 
                 if fs_doubledip:
@@ -267,21 +256,19 @@ def mvp_classify(sub_dir, inputs):
             or continuing with ROI-averaged features (fs_average), or with
             all features from a generic univariate feature selection '''
 
-            if fs_cluster:
+            if cluster_args['do_clust']:
 
                 # This block of code (which refers to the clustercorrect_feature
                 # _selection function) can be optimized/written more clearly
-                inpt = {'mvp': mvp, 'train_data': train_data,
-                        'train_labels': train_labels, 'test_data': test_data,
-                        'fs_arg': fs_arg, 'cluster_min': cluster_min,
-                        'selector': selector, 'fs_data': fs_data,
-                        'vox_idx': vox_idx, 'cluster_cleanup': cluster_cleanup,
-                        'test_demean_clust': test_demean_clust}
+                input_cc = {'mvp': mvp, 'train_data': train_data,
+                            'train_labels': train_labels, 'test_data': test_data,
+                            'cluster_args': cluster_args, 'selector': selector,
+                            'fs_data': fs_data, 'vox_idx': vox_idx, }
 
                 # Cluster data & return averaged (if not cluster_cleanup) ftrs
-                output = clustercorrect_feature_selection(**inpt)
+                output = clustercorrect_feature_selection(input_cc)
                 train_data, test_data, cl_idx, fs_data, vox_idx = output
-                cluster_count[i] = train_data.shape[1]
+                feats_per_clust[i] = np.round(np.sum(vox_idx) / train_data.shape[1])
 
             # If working with averaged ROIs, update params appropriately
             # Note: fs_average and fs_cluster are mutually exclusive params
@@ -296,7 +283,8 @@ def mvp_classify(sub_dir, inputs):
                         fs_data['score'][av_idx[:, k].astype(bool)] += selector.zvalues[k]
                         fs_data['count'][av_idx[:, k].astype(bool)] += 1
                         vox_idx[av_idx[:, k].astype(bool)] += 1
-            elif fs_arg > 0:
+
+            elif fs_arg > 0: # implying generic univariate feature selection
                 train_data = selector.transform(train_data)
                 test_data = selector.transform(test_data)
                 fs_data['score'][selector.idx] += selector.zvalues[selector.idx]
@@ -304,22 +292,20 @@ def mvp_classify(sub_dir, inputs):
                 vox_idx[selector.idx] += 1
 
             # Perform PCA on data (if specified)
-            if do_pca:
-                pca = RandomizedPCA(n_components=2)
+            if pca_args['do_pca']:
+                pca = RandomizedPCA(n_components=pca_args['n_comp']+pca_args['start_idx']-1)
                 pca.fit(train_data)
-                train_data = pca.transform(train_data)
-                train_data = np.expand_dims(train_data[:, 1], axis=0).T
-                test_data = pca.transform(test_data)
-                test_data = np.expand_dims(test_data[:, 1], axis=0).T
+                train_data = pca.transform(train_data)[:, pca_args['start_idx']-1:]
+                test_data = pca.transform(test_data)[:, pca_args['start_idx']-1:]
 
             if demean_patterns:
                 train_data = train_data - np.expand_dims(train_data.mean(axis=1), axis=1)
 
             if average_patterns:
-                train_data = np.expand_dims(np.mean(train_data, axis=1), axis=1)
-                test_data = np.expand_dims(np.mean(test_data, axis=1), axis=1)
+                train_data = np.mean(train_data, axis=1)
+                test_data = np.mean(test_data, axis=1)
 
-            if save_corrs:
+            if save_feat_corrs:
                 if train_data.shape[1] == 1:
                     correlations[i] = np.nan
                 else:
@@ -328,23 +314,26 @@ def mvp_classify(sub_dir, inputs):
             else:
                 correlations[i] = 0
 
+            if train_data.ndim == 1:
+                train_data = np.expand_dims(train_data, axis=0)
+                test_data = np.expand_dims(test_data, axis=0)
+
             # Fit the SVM and store prediction
             clf.fit(train_data, train_labels)
-            test_pred = clf.predict(test_data)
+            prediction = clf.predict(test_data)
 
             # Update scores
             if score_method == 'iteration_based':
-                precision[i] = precision_score(test_labels, test_pred, average='macro')
-                recall[i] = recall_score(test_labels, test_pred, average='macro')
-                accuracy[i] = accuracy_score(test_labels, test_pred)
+                precision[i] = precision_score(test_labels, prediction, average='macro')
+                recall[i] = recall_score(test_labels, prediction, average='macro')
+                accuracy[i] = accuracy_score(test_labels, prediction)
             elif score_method == 'trial_based':
-                trials_score[test_idx, (test_pred - 1).astype(int)] += 1
+                trials_score[test_idx, (prediction - 1).astype(int)] += 1
 
             # Update score per voxel and feature descriptive statistics
             vox_score[vox_idx.astype(bool)] += clf.score(test_data, test_labels)
             #vox_score[vox_idx.astype(bool)] += np.mean(clf.coef_, axis=0)
             feature_count[i] = train_data.shape[1]
-            feature_prop[i] = np.true_divide(feature_count[i], mvp.n_features)
 
         """ END CROSS-VALIDATION LOOP """
         if mvp.subject_name == 'HWW_012':
@@ -402,14 +391,9 @@ def mvp_classify(sub_dir, inputs):
               'recall': np.round(recall, 3),
               'fs_count': np.round(np.mean(feature_count), 3),
               'fs_std': np.round(np.std(feature_count), 3),
-              'fs_prop': np.round(np.mean(feature_prop), 3),
               'corr_vox:': np.round(np.mean(correlations), 3)}
 
-        if fs_cluster:
-            df['cluster_count'] = np.mean(cluster_count)
-
         df = pd.DataFrame(df, index=[0])
-
         df_list.append(df)
 
     df = pd.concat(df_list)
@@ -417,7 +401,7 @@ def mvp_classify(sub_dir, inputs):
         df.to_csv(f, header=True, sep='\t', index=False)
 
 
-def clustercorrect_feature_selection(**input):
+def clustercorrect_feature_selection(input_cc):
     """ Performs minimal cluster-thresholding for univariate feature selection
 
     Args:
@@ -439,54 +423,22 @@ def clustercorrect_feature_selection(**input):
     """
 
     # Unpacking arguments
-    mvp = input['mvp']
-    train_data = input['train_data']
-    train_labels = input['train_labels']
-    test_data = input['test_data']
-    selector = input['selector']
-    cluster_min = input['cluster_min']
-    fs_arg = input['fs_arg']
-    vox_idx = input['vox_idx']
-    fs_data = input['fs_data']
-    cluster_cleanup = input['cluster_cleanup']
-    test_demean_clust = input['test_demean_clust']
+    mvp = input_cc['mvp']
+    train_data = input_cc['train_data']
+    train_labels = input_cc['train_labels']
+    test_data = input_cc['test_data']
+    selector = input_cc['selector']
+    cluster_args = input_cc['cluster_args']
+    vox_idx = input_cc['vox_idx']
+    fs_data = input_cc['fs_data']
 
     # Create fs: vector of length mask_shape with univariate feature weights
     fs = np.zeros(mvp.mask_shape).ravel()
     fs[mvp.mask_index] = selector.zvalues
     fs = fs.reshape(mvp.mask_shape)
 
-    # Write to nifti
-    img = nib.Nifti1Image(fs, np.eye(4))
-    in_file_name = opj(os.getcwd(), '%s_ToCluster.nii.gz' % mvp.subject_name)
-    out_file_name = opj(os.getcwd(), '%s_Clustered.nii.gz' % mvp.subject_name)
-    nib.save(img, in_file_name)
-
-    # Perform clustering using FSL's cluster command
-    # http://fsl.fmrib.ox.ac.uk/fsl/fslwiki/Cluster
-    cmd = 'cluster -i %s -t %f -o %s --no_table' % \
-          (in_file_name, fs_arg, out_file_name)
-
-    _ = os.system(cmd)
-
-    # Load in clustered data
-    clustered = nib.load(out_file_name).get_data()
-    cluster_IDs = sorted(np.unique(clustered), reverse=True)
-
-    # cl_idx holds indices per cluster
-    cl_idx = np.zeros((mvp.data.shape[1], len(cluster_IDs)))
-
-    # Update cl_idx until cluster-size < cluster_min
-    for j, clt in enumerate(cluster_IDs):
-        idx = (clustered == clt).ravel()[mvp.mask_index]
-
-        if np.sum(idx) < cluster_min:
-            break
-        else:
-            cl_idx[:, j] = idx
-
-    # Trim zeros from cl_idx
-    cl_idx = cl_idx[:, np.sum(cl_idx, 0) > 0].astype(bool)
+    # Use clustercorrect_generic to perform actual cluster-thresholding
+    cl_idx = clustercorrect_generic(fs, mvp, selector.zvalue, cluster_args['minimum'])
     n_clust = cl_idx.shape[1]
     allclust_idx = np.sum(cl_idx, 1).astype(bool)
 
@@ -499,78 +451,35 @@ def clustercorrect_feature_selection(**input):
        (test_demean_clust)
     """
 
-    if cluster_cleanup:
+    if cluster_args['cleanup']:
         train_data = train_data[:, allclust_idx]
         test_data = test_data[:, allclust_idx]
         fs_data['score'][allclust_idx] += selector.zvalues[allclust_idx]
         fs_data['count'][allclust_idx] += 1
         vox_idx[allclust_idx] += 1
 
-    elif test_demean_clust:
+    elif cluster_args['test_demean']:
 
+        # Demean clusters separately
         for j in xrange(n_clust):
             idx = cl_idx[:, j]
             tmp = train_data[:, idx]
             train_data[:, idx] = tmp - np.expand_dims(tmp.mean(axis=1), axis=1)
 
-        # Trim voxels which are not in contained in clusters
-        #train_data = train_data[:, allclust_idx]
-        #test_data = test_data[:, allclust_idx]
+        # Perform feature selection again!
         selector.fit(train_data, train_labels)
 
         fs = np.zeros(mvp.mask_shape).ravel()
         fs[mvp.mask_index] = selector.zvalues
         fs = fs.reshape(mvp.mask_shape)
 
-        cluster_min = np.round(0.5 * cluster_min)
-
-        # Write to nifti
-        img = nib.Nifti1Image(fs, np.eye(4))
-        in_file_name = opj(os.getcwd(), '%s_ToCluster2.nii.gz' % mvp.subject_name)
-        out_file_name = opj(os.getcwd(), '%s_Clustered2.nii.gz' % mvp.subject_name)
-        nib.save(img, in_file_name)
-
-        cmd = 'cluster -i %s -t %f -o %s --no_table' % \
-              (in_file_name, fs_arg, out_file_name)
-        _ = os.system(cmd)
-
-        clustered = nib.load(out_file_name).get_data()
-        cluster_IDs = sorted(np.unique(clustered), reverse=True)
-
-        # cl_idx holds indices per cluster
-        cl_idx = np.zeros((mvp.data.shape[1], len(cluster_IDs)))
-
-        # Update cl_idx until cluster-size < cluster_min
-        for j, clt in enumerate(cluster_IDs):
-            idx = (clustered == clt).ravel()[mvp.mask_index]
-
-            if np.sum(idx) < cluster_min:
-                break
-            else:
-                cl_idx[:, j] = idx
-
-        # Trim zeros from cl_idx
-        cl_idx = cl_idx[:, np.sum(cl_idx, 0) > 0].astype(bool)
+        minimum = np.round(0.5 * cluster_args['minimum'])
+        cl_idx = clustercorrect_generic(fs, mvp, selector.zvalue, minimum)
         n_clust = cl_idx.shape[1]
         allclust_idx = np.sum(cl_idx, 1).astype(bool)
 
-        cl_train = np.zeros((train_data.shape[0], cl_idx.shape[1]))
-        cl_test = np.zeros((test_data.shape[0], cl_idx.shape[1]))
+    if cluster_args['test_demean'] or not cluster_args['cleanup']:
 
-        for j in xrange(n_clust):
-            idx = cl_idx[:, j]
-            cl_train[:, j] = np.mean(train_data[:, idx], axis=1)
-            cl_test[:, j] = np.mean(test_data[:, idx], axis=1)
-            av_cluster = np.mean(selector.zvalues[idx])
-            fs_data['score'][idx] += av_cluster
-            fs_data['count'][idx] += 1
-            vox_idx[idx] += 1
-
-        # Updating train_data (trials X voxels) to clusterec (trials X clusters)
-        train_data = cl_train
-        test_data = cl_test
-
-    else:
         cl_train = np.zeros((train_data.shape[0], cl_idx.shape[1]))
         cl_test = np.zeros((test_data.shape[0], cl_idx.shape[1]))
 
@@ -592,6 +501,41 @@ def clustercorrect_feature_selection(**input):
     output = (train_data, test_data, cl_idx, fs_data, vox_idx)
 
     return output
+
+
+def clustercorrect_generic(data, mvp, zvalue, minimum):
+
+    # Write to nifti
+    img = nib.Nifti1Image(data, np.eye(4))
+    in_file_name = opj(os.getcwd(), '%s_ToCluster.nii.gz' % mvp.subject_name)
+    out_file_name = opj(os.getcwd(), '%s_Clustered.nii.gz' % mvp.subject_name)
+    nib.save(img, in_file_name)
+
+    # Perform clustering using FSL's cluster command
+    # http://fsl.fmrib.ox.ac.uk/fsl/fslwiki/Cluster
+    cmd = 'cluster -i %s -t %f -o %s --no_table' % \
+          (in_file_name, zvalue, out_file_name)
+
+    _ = os.system(cmd)
+
+    # Load in clustered data
+    clustered = nib.load(out_file_name).get_data()
+    cluster_IDs = sorted(np.unique(clustered), reverse=True)
+
+    # cl_idx holds indices per cluster
+    cl_idx = np.zeros((mvp.data.shape[1], len(cluster_IDs)))
+
+    # Update cl_idx until cluster-size < cluster_min
+    for j, clt in enumerate(cluster_IDs):
+        idx = (clustered == clt).ravel()[mvp.mask_index]
+
+        if np.sum(idx) < minimum:
+            break
+        else:
+            cl_idx[:, j] = idx
+
+    # Trim zeros from cl_idx
+    return cl_idx[:, np.sum(cl_idx, 0) > 0].astype(bool)
 
 
 def average_classification_results(inputs):
@@ -653,7 +597,7 @@ def average_classification_results(inputs):
         filename = 'results_per_sub.csv'
         os.rename('analysis_parameters', filename)
 
-    if inputs['fs_cluster']:
+    if inputs['cluster_args']['do_clust']:
         [os.remove(p) for p in glob.glob('*Clustered*')]
 
     [os.remove(p) for p in glob.glob('*averaged*')]
@@ -696,43 +640,57 @@ if __name__ == '__main__':
 
     # Information about which data to use
     home = os.path.expanduser('~')
-    feat_dir = opj(home, 'DecodingEmotions')
-    ROI_dir = opj(home, 'ROIs')
+    feat_dir = opj(home, 'DecodingEmotions_tmp2')
+    ROI_dir = opj(home, 'ROIs', 'Harvard_Oxford_atlas')
     os.chdir(feat_dir)
-    identifier = 'merged'
+    identifier = 'merged'  
 
     mvp_dir = opj(os.getcwd(), 'mvp_mats')
     header_dirs = sorted(glob.glob(opj(mvp_dir, '*%s*cPickle' % identifier)))
     data_dirs = sorted(glob.glob(opj(mvp_dir, '*%s*hdf5' % identifier)))
     subject_dirs = zip(header_dirs, data_dirs)
 
-    # Parameters for classification
-    inputs = {}
-    inputs['clf'] = svm.SVC(kernel='linear')
-    inputs['iterations'] = 10
-    inputs['n_test'] = 4
-    #inputs['mask_file'] = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'bilateral', '*nii.gz*')))
-    #inputs['mask_file'] = sorted(glob.glob(opj(ROI_dir, 'Harvard_Oxford_atlas', 'unilateral', '*nii.gz*')))
-    inputs['mask_file'] = glob.glob(opj(ROI_dir, 'GrayMatter.nii.gz'))
-    inputs['fs_method'] = SelectAboveZvalue
-    inputs['fs_arg'] = 1.8 # set to -1 for no feature selection
-    inputs['fs_doubledip'] = False
-    inputs['fs_average'] = False
-    inputs['fs_cluster'] = True
-    inputs['cluster_min'] = 40
-    inputs['cluster_cleanup'] = False
-    inputs['test_demean_clust'] = False
-    inputs['demean_patterns'] = False
-    inputs['average_patterns'] = False
-    inputs['cv_method'] = StratifiedShuffleSplit
-    inputs['score_method'] = 'trial_based'  # iteration_based
-    inputs['do_pca'] = False
-    inputs['save_corrs'] = True
+    # dictionary with possible masks (based on Harvard-Oxford cortical atlas)
+    mask_file = dict([('bilateral', sorted(glob.glob(opj(ROI_dir, 'bilateral', '*nii.gz*')))),
+                      ('unilateral', sorted(glob.glob(opj(ROI_dir, 'unilateral', '*nii.gz*')))),
+                      ('wholebrain', glob.glob(opj(ROI_dir, 'GrayMatter.nii.gz')))])
 
+    # Parameters for classification
+    inputs = {'clf': svm.SVC(kernel='linear'),
+              'iterations': 2000,
+              'n_test': 4,
+              'mask_file': mask_file['wholebrain'],
+              'fs_method': SelectAboveZvalue,
+              'fs_arg': 1.8,
+              'fs_doubledip': False,
+              'fs_average': False,
+
+              'cluster_args': {'do_clust': True,
+                               'minimum': 40,
+                               'cleanup': False,
+                               'test_demean': True},
+
+              'demean_patterns': False,
+              'average_patterns': False,
+
+              'cv_method': StratifiedShuffleSplit,
+              'score_method': 'trial_based',
+
+              'pca_args': {'do_pca': True,
+                           'n_comp': 1,
+                           'start_idx': 1},
+
+              'subject_timer': 'HWW_012',
+              'save_feat_corrs': False}
+
+    # In case of 'debug', analysis is run serially (easier to read error msgs),
+    # otherwise analysis run on number of cores = number of subjects
     debug = False
     n_proc = 1 if debug else len(subject_dirs)
 
-    # Run classification on n_cores = len(subjects)
+    # RUN ANALYSIS
     Parallel(n_jobs=n_proc) \
         (delayed(mvp_classify)(sub_dir, inputs) for sub_dir in subject_dirs)
+
+    # Scrape results and average
     average_classification_results(inputs)
