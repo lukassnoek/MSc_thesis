@@ -1,3 +1,5 @@
-# MSc_thesis
-Repository for my thesis for the research master Psychology program at the 
-University of Amsterdam. 
+# MSc Thesis: On the dimensionality of global functional networks
+This repository contains the code for the analysis developed for my thesis project. Initially, a novel experimental paradigm was developed to study the neural representation of the development of emotional associations (code is stored under 'Stimulus_delivery'), but has been discontinued due to null-results from the pilot-study. (Extra participants will be tested soon to definitely conclude whether the paradigm works or not.)
+
+As an alternative thesis project, I reanalyzed the data from the Decoding Emotions project (see for more info the respective repository), on which I worked for my research internship. The goal of this thesis was to investigate on what level representational information is encoded in whole-brain (global) functional networks. A written report can be found in the 'TEX_thesis' subdirectory. Code for the analysis can be found in the 'Analysis_scripts' directory. Note that I rewrote all the MATLAB-code I used for the Decoding Emotions project into an analysis-pipeline in Python, which mainly depends on the Numpy and Scikit-learn packages. 
+
