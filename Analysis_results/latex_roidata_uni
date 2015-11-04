@@ -1,0 +1,6 @@
+mask,accuracy_av,tvalues,pvalues
+IntraCalcarineCortex_right,0.404 (0.028),8.832,0.000001
+MTG_ant_left,0.454 (0.049),8.444,0.000002
+IntraCalcarineCortex_left,0.408 (0.032),8.119,0.000003
+TemporalPole_left,0.408 (0.034),7.636,0.000005
+ParietalOperculum_right,0.394 (0.035),6.056,0.000041
