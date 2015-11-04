@@ -16,7 +16,7 @@
 *.ipynb_checkpoints/
 
 # Articles
-*.pdf
+#.pdf
 *et al*
 
 # Git stuff
