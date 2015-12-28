@@ -36,13 +36,14 @@
 *.wav
 Stimulus_delivery/log/*
 *.jpg
-*.JPlsG
-*.png
-*.csv
+*.JPG
+*.png*
+*.csv*
 
 .idea
 
 *wav*
 *settings.jar*
 
-Analysis_results/*
+Analysis_results/*s
+

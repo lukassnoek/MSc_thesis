@@ -213,7 +213,6 @@ def mvp_classify(sub_dir, inputs):
 
         """ START CROSS-VALIDATION LOOP """
         for i, (train_idx, test_idx) in enumerate(folds):
-
             # Update progressbar
             if mvp.subject_name == subject_timer:
                 pb.update(i+1)
@@ -477,8 +476,8 @@ def clustercorrect_feature_selection(input_cc):
 
         for j in xrange(n_clust):
             idx = cl_idx[:, j]
-            cl_train[:, j] = np.mean(train_data[:, idx], axis=1)
-            cl_test[:, j] = np.mean(test_data[:, idx], axis=1)
+            cl_train[:, j] = np.median(train_data[:, idx], axis=1)
+            cl_test[:, j] = np.median(test_data[:, idx], axis=1)
             av_cluster = np.mean(selector.zvalues[idx])
             fs_data['score'][idx] += av_cluster
             fs_data['count'][idx] += 1
@@ -633,13 +632,13 @@ if __name__ == '__main__':
     # Parameters for classification
     inputs = {# General paramters
               'clf': svm.SVC(kernel='linear'),
-              'iterations': 10,
+              'iterations': 2000,
               'n_test': 4,
               'mask_file': mask_file['wholebrain'],
               'cv_method': StratifiedShuffleSplit,
               'score_method': 'trial_based',
               'subject_timer': 'HWW_012',
-              'save_feat_corrs': True,
+              'save_feat_corrs': False,
               'n_cores': len(subject_dirs),
 
               # Feature selection parameters
@@ -652,7 +651,7 @@ if __name__ == '__main__':
               'cluster_args': {'do_clust': True,
                                'minimum': 40,
                                'cleanup': False,
-                               'test_demean': True},
+                               'test_demean': False},
 
 
               # Other feature transformation parameters
