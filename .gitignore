@@ -10,7 +10,7 @@
 *.brf
 *count.txt
 
-# Python and other programming stuff
+# Python
 *.pyc
 *.py~
 *.ipynb_checkpoints/
@@ -36,9 +36,13 @@
 *.wav
 Stimulus_delivery/log/*
 *.jpg
-*.JPG
+*.JPlsG
+*.png
+*.csv
 
 .idea
 
 *wav*
 *settings.jar*
+
+Analysis_results/*
